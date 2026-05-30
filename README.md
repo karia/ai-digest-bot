@@ -72,6 +72,26 @@ make lint
 make test
 ```
 
+## Lambda テスト実行
+
+現在時刻を `scheduled_time` として Lambda を手動 invoke する:
+
+```bash
+make invoke
+```
+
+特定の日時を指定する場合は `app/events/test_event.json` を編集してから:
+
+```bash
+aws lambda invoke \
+  --function-name <関数名> \
+  --cli-binary-format raw-in-base64-out \
+  --payload file://app/events/test_event.json \
+  /dev/stdout
+```
+
+> `scheduled_time` を省略した空の `{}` で invoke した場合は、実行時刻を基準にフォールバックします。
+
 ## フィード管理
 
 `feeds` テーブルの一覧・追加・削除は Make ターゲットで行います（内部で `scripts/manage_feeds.py` を実行）。
