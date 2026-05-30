@@ -25,9 +25,8 @@ lint-tf:
 build:
 	uv export --no-dev --no-hashes -o requirements.txt
 	rm -rf .build
-	pip install -r requirements.txt -t .build/ --quiet
-	cp -r app/src/* .build/
-	cd .build && zip -r ../function.zip .
+	uv pip install -r requirements.txt --target .build/
+	cp -r app/src .build/src
 
 deploy-infra:
 	cd terraform && terraform init && terraform apply -auto-approve
@@ -41,7 +40,7 @@ deploy-app: build
 	  LAMBDA_ROLE_ARN="$$(terraform -chdir=../terraform output -raw lambda_role_arn)" \
 	  FEEDS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw feeds_table_name)" \
 	  SLACK_BOT_TOKEN_PARAM="$$(terraform -chdir=../terraform output -raw slack_token_param_name)" \
-	  lambroll deploy --function function.jsonnet
+	  lambroll deploy --function function.jsonnet --src ../.build
 
 deploy-app-dry: build
 	cd app && \
@@ -49,7 +48,7 @@ deploy-app-dry: build
 	  LAMBDA_ROLE_ARN="$$(terraform -chdir=../terraform output -raw lambda_role_arn)" \
 	  FEEDS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw feeds_table_name)" \
 	  SLACK_BOT_TOKEN_PARAM="$$(terraform -chdir=../terraform output -raw slack_token_param_name)" \
-	  lambroll diff --function function.jsonnet
+	  lambroll diff --function function.jsonnet --src ../.build
 
 deploy: deploy-infra deploy-app
 
