@@ -1,4 +1,4 @@
-.PHONY: setup test lint lint-app lint-tf build deploy-infra deploy-app deploy deploy-infra-dry deploy-app-dry deploy-dry feeds-list feeds-add feeds-delete update-actions
+.PHONY: setup test lint lint-app lint-tf build clean deploy-infra deploy-app deploy deploy-infra-dry deploy-app-dry deploy-dry feeds-list feeds-add feeds-delete update-actions invoke
 
 export PATH := $(HOME)/.local/share/mise/shims:$(PATH)
 
@@ -27,6 +27,9 @@ build:
 	rm -rf .build
 	uv pip install -r requirements.txt --target .build/
 	cp -r app/src .build/src
+
+clean:
+	rm -rf .build requirements.txt function.zip
 
 deploy-infra:
 	cd terraform && terraform init && terraform apply -auto-approve
@@ -68,3 +71,10 @@ feeds-delete:
 
 update-actions:
 	pinact -u .github/workflows/ci.yml
+
+invoke:
+	aws lambda invoke \
+	  --function-name "$$(terraform -chdir=terraform output -raw lambda_function_name)" \
+	  --cli-binary-format raw-in-base64-out \
+	  --payload "$$(python3 -c "from datetime import UTC,datetime; print('{\"scheduled_time\":\"' + datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ') + '\"}')")" \
+	  /dev/stdout

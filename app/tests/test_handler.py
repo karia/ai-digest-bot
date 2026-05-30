@@ -1,4 +1,5 @@
 import importlib
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -31,16 +32,24 @@ def test_handler_returns_ok_with_no_feeds(integrated_aws_mock):
 def test_handler_processes_feeds_and_posts(integrated_aws_mock):
     from src.handler import lambda_handler
 
+    scheduled_time = "2026-06-01T00:00:00Z"
+    expected_until = datetime.fromisoformat(scheduled_time)
+    expected_since = expected_until - timedelta(hours=24)
+
     mock_digest = "テストダイジェスト"
     with (
         patch("src.handler.run_digest", return_value=mock_digest) as mock_run,
         patch("src.handler.post_digest") as mock_post,
     ):
-        result = lambda_handler({}, None)
+        result = lambda_handler({"scheduled_time": scheduled_time}, None)
 
     assert result["status"] == "ok"
     assert result["channels"] == 1
-    mock_run.assert_called_once()
+    mock_run.assert_called_once_with(
+        ["https://aws.amazon.com/blogs/aws/feed/"],
+        since=expected_since,
+        until=expected_until,
+    )
     mock_post.assert_called_once()
     call_args = mock_post.call_args
     assert call_args[0][0] == "CTEST12345"
@@ -72,7 +81,7 @@ def test_handler_continues_on_channel_error(integrated_aws_mock):
         patch("src.handler.run_digest", return_value="digest"),
         patch("src.handler.post_digest", side_effect=fail_for_channel),
     ):
-        result = lambda_handler({}, None)
+        result = lambda_handler({"scheduled_time": "2026-06-01T00:00:00Z"}, None)
 
     assert result["status"] == "ok"
     assert result["channels"] == 2
