@@ -39,7 +39,7 @@ uv run pre-commit install
 
 ```bash
 aws ssm put-parameter \
-  --name "/aws-blog-digest/slack-bot-token" \
+  --name "/ai-digest-bot/slack-bot-token" \
   --value "xoxb-..." \
   --type SecureString \
   --overwrite
