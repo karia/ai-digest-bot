@@ -13,7 +13,7 @@ local env = std.native('env');
     Variables: {
       FEEDS_TABLE_NAME: must_env('FEEDS_TABLE_NAME'),
       SLACK_BOT_TOKEN_PARAM: must_env('SLACK_BOT_TOKEN_PARAM'),
-      BEDROCK_MODEL_ID: env('BEDROCK_MODEL_ID', 'anthropic.claude-sonnet-4-20250514-v1:0'),
+      BEDROCK_MODEL_ID: env('BEDROCK_MODEL_ID', 'anthropic.claude-opus-4-8'),
     },
   },
 }

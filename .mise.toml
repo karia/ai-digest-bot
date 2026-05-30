@@ -2,7 +2,7 @@
 python = "3.14"
 terraform = "latest"
 tflint = "latest"
-"ubi:fujiwara/lambroll" = "v1"
+"aqua:fujiwara/lambroll" = "latest"
 "aqua:aws/aws-cli" = "2"
 "aqua:suzuki-shunsuke/pinact" = "latest"
 
