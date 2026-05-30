@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.build/
+function.zip
+.terraform/
+*.tfstate*
+.terraform.lock.hcl
+*.egg-info/
+dist/
+.venv/
+.ruff_cache/
+.mypy_cache/
+requirements.txt

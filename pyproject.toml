@@ -1,0 +1,38 @@
+[project]
+name = "aws-blog-digest"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "strands-agents",
+    "strands-agents-tools",
+    "feedparser",
+    "beautifulsoup4",
+    "requests",
+    "boto3",
+    "slack-sdk",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "moto[dynamodb,ssm]",
+    "responses",
+    "ruff",
+    "mypy",
+    "boto3-stubs[dynamodb,ssm,bedrock-runtime]",
+    "pre-commit",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["app/tests"]
+
+[tool.ruff]
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+ignore_missing_imports = true
