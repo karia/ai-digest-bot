@@ -1,0 +1,19 @@
+# Package metadata (not needed at runtime)
+*.dist-info*
+
+# Python bytecode
+*.pyc
+*.pyo
+
+# Type stubs
+*.pyi
+
+# Test suites bundled inside packages
+*/tests/*
+*/test/*
+
+# Documentation bundled inside packages
+*/docs/*
+*/doc/*
+*.md
+*.rst

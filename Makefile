@@ -27,6 +27,9 @@ build:
 	rm -rf .build
 	uv pip install -r requirements.txt --target .build/
 	cp -r app/src .build/src
+	find .build/botocore/data -maxdepth 1 -mindepth 1 -type d \
+	  ! -name dynamodb ! -name ssm ! -name bedrock-runtime ! -name sts \
+	  -exec rm -rf {} +
 
 deploy-infra:
 	cd terraform && terraform init && terraform apply -auto-approve
