@@ -3,6 +3,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+SINCE = "2026-05-29T00:00:00Z"
+UNTIL = "2026-05-31T00:00:00Z"
+
 
 def make_entry(title: str, link: str, published_parsed: tuple | None) -> MagicMock:
     entry = MagicMock()
@@ -39,7 +42,7 @@ def test_rss_fetch_returns_recent_articles(recent_entry):
     mock_feed.entries = [recent_entry]
 
     with patch("feedparser.parse", return_value=mock_feed):
-        result = rss_fetch("https://example.com/feed/")
+        result = rss_fetch("https://example.com/feed/", since=SINCE, until=UNTIL)
 
     assert "Recent Article" in result
     assert "https://example.com/recent" in result
@@ -52,7 +55,7 @@ def test_rss_fetch_excludes_old_articles(old_entry):
     mock_feed.entries = [old_entry]
 
     with patch("feedparser.parse", return_value=mock_feed):
-        result = rss_fetch("https://example.com/feed/")
+        result = rss_fetch("https://example.com/feed/", since=SINCE, until=UNTIL)
 
     assert result == "No recent articles found."
 
@@ -64,7 +67,7 @@ def test_rss_fetch_no_articles():
     mock_feed.entries = []
 
     with patch("feedparser.parse", return_value=mock_feed):
-        result = rss_fetch("https://example.com/feed/")
+        result = rss_fetch("https://example.com/feed/", since=SINCE, until=UNTIL)
 
     assert result == "No recent articles found."
 
@@ -73,6 +76,6 @@ def test_rss_fetch_handles_error():
     from src.tools.rss_fetch import rss_fetch
 
     with patch("feedparser.parse", side_effect=Exception("Network error")):
-        result = rss_fetch("https://example.com/feed/")
+        result = rss_fetch("https://example.com/feed/", since=SINCE, until=UNTIL)
 
     assert "Error" in result
