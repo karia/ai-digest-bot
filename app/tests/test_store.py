@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def reload_config():
     import src.config as cfg
+
     importlib.reload(cfg)
 
 
@@ -21,7 +22,9 @@ def test_get_all_feeds_returns_items(dynamodb_table):
 def test_get_all_feeds_returns_empty_when_no_items(dynamodb_table):
     from src.store import get_all_feeds
 
-    dynamodb_table.delete_item(Key={"feed_url": "https://aws.amazon.com/blogs/aws/feed/"})
+    dynamodb_table.delete_item(
+        Key={"feed_url": "https://aws.amazon.com/blogs/aws/feed/"}
+    )
     feeds = get_all_feeds()
     assert feeds == []
 

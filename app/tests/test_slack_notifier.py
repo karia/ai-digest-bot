@@ -57,7 +57,9 @@ def test_post_digest_raises_on_slack_error():
     with patch("src.slack_notifier.WebClient") as MockClient:
         instance = MockClient.return_value
         mock_response = MagicMock()
-        mock_response.__getitem__ = lambda self, key: "channel_not_found" if key == "error" else None
+        mock_response.__getitem__ = lambda self, key: (
+            "channel_not_found" if key == "error" else None
+        )
         instance.chat_postMessage.side_effect = SlackApiError("error", mock_response)
 
         with pytest.raises(RuntimeError, match="Slack API error"):

@@ -1,5 +1,5 @@
 import importlib
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -7,8 +7,10 @@ import pytest
 @pytest.fixture(autouse=True)
 def reload_modules():
     import src.config as cfg
+
     importlib.reload(cfg)
     import src.store as store
+
     importlib.reload(store)
 
 

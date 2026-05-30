@@ -1,6 +1,4 @@
-import responses as resp_mock
 import responses
-
 
 SAMPLE_HTML = """
 <html>
@@ -21,7 +19,9 @@ SAMPLE_HTML = """
 def test_web_scrape_extracts_main_content():
     from src.tools.web_scrape import web_scrape
 
-    responses.add(responses.GET, "https://example.com/article", body=SAMPLE_HTML, status=200)
+    responses.add(
+        responses.GET, "https://example.com/article", body=SAMPLE_HTML, status=200
+    )
 
     result = web_scrape("https://example.com/article")
 
@@ -47,7 +47,9 @@ def test_web_scrape_truncates_long_content():
     from src.tools.web_scrape import web_scrape
 
     long_content = "<html><body><main>" + "a" * 10000 + "</main></body></html>"
-    responses.add(responses.GET, "https://example.com/long", body=long_content, status=200)
+    responses.add(
+        responses.GET, "https://example.com/long", body=long_content, status=200
+    )
 
     result = web_scrape("https://example.com/long")
 

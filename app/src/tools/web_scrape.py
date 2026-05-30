@@ -33,7 +33,8 @@ def web_scrape(url: str) -> str:
         tag.decompose()
 
     main = soup.find("main") or soup.find("article") or soup.find("body")
-    text = main.get_text(separator="\n", strip=True) if main else soup.get_text(separator="\n", strip=True)
+    target = main if main else soup
+    text = target.get_text(separator="\n", strip=True)
 
     lines = [line for line in text.splitlines() if line.strip()]
     return "\n".join(lines)[:5000]

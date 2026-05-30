@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import feedparser
 from strands import tool
@@ -23,12 +23,12 @@ def rss_fetch(url: str) -> str:
     except Exception as e:
         return f"Error fetching RSS feed: {e}"
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    cutoff = datetime.now(UTC) - timedelta(hours=24)
     results: list[str] = []
 
     for entry in feed.entries:
         if hasattr(entry, "published_parsed") and entry.published_parsed:
-            pub = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+            pub = datetime(*entry.published_parsed[:6], tzinfo=UTC)
             if pub < cutoff:
                 continue
         results.append(

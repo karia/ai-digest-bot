@@ -1,5 +1,5 @@
-import pytest
 import boto3
+import pytest
 from moto import mock_aws
 
 SAMPLE_RSS = """<?xml version="1.0"?>

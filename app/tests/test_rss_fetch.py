@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -6,7 +6,8 @@ import pytest
 
 def make_entry(title: str, link: str, published_parsed: tuple | None) -> MagicMock:
     entry = MagicMock()
-    entry.get = lambda key, default="N/A": {"title": title, "link": link}.get(key, default)
+    data = {"title": title, "link": link}
+    entry.get = lambda key, default="N/A": data.get(key, default)
     entry.title = title
     entry.link = link
     entry.summary = "Test summary"
@@ -19,13 +20,15 @@ def make_entry(title: str, link: str, published_parsed: tuple | None) -> MagicMo
 
 @pytest.fixture
 def recent_entry():
-    dt = datetime(2026, 5, 30, 1, 0, 0, tzinfo=timezone.utc)
-    return make_entry("Recent Article", "https://example.com/recent", dt.timetuple()[:6])
+    dt = datetime(2026, 5, 30, 1, 0, 0, tzinfo=UTC)
+    return make_entry(
+        "Recent Article", "https://example.com/recent", dt.timetuple()[:6]
+    )
 
 
 @pytest.fixture
 def old_entry():
-    dt = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    dt = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
     return make_entry("Old Article", "https://example.com/old", dt.timetuple()[:6])
 
 
