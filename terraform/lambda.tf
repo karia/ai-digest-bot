@@ -50,7 +50,7 @@ resource "aws_iam_policy" "lambda_ssm" {
       }, {
       Effect   = "Allow"
       Action   = ["kms:Decrypt"]
-      Resource = "arn:aws:kms:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:alias/aws/ssm"
+      Resource = "arn:aws:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:alias/aws/ssm"
     }]
   })
 }
@@ -63,7 +63,7 @@ resource "aws_iam_policy" "lambda_bedrock" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
-      Resource = "arn:aws:bedrock:${data.aws_region.current.name}::foundation-model/${var.bedrock_model_id}"
+      Resource = "arn:aws:bedrock:${data.aws_region.current.region}::foundation-model/${var.bedrock_model_id}"
     }]
   })
 }
@@ -91,9 +91,7 @@ resource "aws_iam_role_policy_attachment" "lambda_bedrock" {
 resource "aws_lambda_function" "main" {
   function_name = var.project_name
   role          = aws_iam_role.lambda_exec.arn
-  # python3.14 is not yet in the Terraform AWS provider validation list.
-  # lambroll (function.jsonnet) sets the actual runtime to python3.14 on deploy.
-  runtime       = "python3.13"
+  runtime       = "python3.14"
   handler       = "src.handler.lambda_handler"
   timeout       = 300
   memory_size   = 512
@@ -112,6 +110,6 @@ resource "aws_lambda_function" "main" {
   }
 
   lifecycle {
-    ignore_changes = [filename, source_code_hash, layers, runtime]
+    ignore_changes = [filename, source_code_hash, layers]
   }
 }
