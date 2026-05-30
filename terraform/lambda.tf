@@ -105,6 +105,10 @@ resource "aws_lambda_function" "main" {
     }
   }
 
+  tracing_config {
+    mode = "Active"
+  }
+
   lifecycle {
     ignore_changes = [filename, source_code_hash, layers]
   }

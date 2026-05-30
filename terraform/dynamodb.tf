@@ -7,4 +7,8 @@ resource "aws_dynamodb_table" "feeds" {
     name = "feed_url"
     type = "S"
   }
+
+  point_in_time_recovery {
+    enabled = true
+  }
 }

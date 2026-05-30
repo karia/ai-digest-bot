@@ -1,0 +1,3 @@
+# AWS-0025: DynamoDB table encryption does not use a customer-managed KMS key.
+# Using AWS managed key (aws/dynamodb) is acceptable for this project.
+AVD-AWS-0025
