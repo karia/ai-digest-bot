@@ -53,8 +53,8 @@ make deploy-infra
 
 # 2. Slack Bot Token を SSM に登録（上記手順参照）
 
-# 3. 初期フィードデータを DynamoDB に投入
-make seed
+# 3. 配信するフィードを DynamoDB に登録
+make feeds-add FEED_URL="https://aws.amazon.com/blogs/aws/feed/" NAME="AWS News Blog" CHANNEL_ID="CXXXXXXXXXX"
 
 # 4. Lambda にソースコードをデプロイ
 make deploy-app
@@ -72,31 +72,28 @@ make lint
 make test
 ```
 
-## フィード追加方法
+## フィード管理
 
-DynamoDB の `aws-blog-digest-feeds` テーブルにレコードを追加します:
+`feeds` テーブルの一覧・追加・削除は Make ターゲットで行います（内部で `scripts/manage_feeds.py` を実行）。
+
+### 一覧表示
 
 ```bash
-aws dynamodb put-item \
-  --table-name aws-blog-digest-feeds \
-  --item '{
-    "feed_url": {"S": "https://example.com/feed/"},
-    "name": {"S": "Example Blog"},
-    "category": {"S": "aws"},
-    "channel_id": {"S": "CXXXXXXXXXX"},
-    "inserted_at": {"S": "2026-01-01T00:00:00+00:00"},
-    "updated_at": {"S": "2026-01-01T00:00:00+00:00"}
-  }'
+make feeds-list
 ```
 
-## フィード削除方法
-
-DynamoDB からレコードを物理削除します:
+### 追加
 
 ```bash
-aws dynamodb delete-item \
-  --table-name aws-blog-digest-feeds \
-  --key '{"feed_url": {"S": "https://example.com/feed/"}}'
+make feeds-add FEED_URL="https://example.com/feed/" NAME="Example Blog" CHANNEL_ID="CXXXXXXXXXX"
+```
+
+同じ `FEED_URL` で再実行すると上書き更新されます（`inserted_at` は保持、`updated_at` のみ更新）。
+
+### 削除
+
+```bash
+make feeds-delete FEED_URL="https://example.com/feed/"
 ```
 
 ## How to Contribute

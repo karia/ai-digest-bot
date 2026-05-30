@@ -53,7 +53,6 @@ def dynamodb_table():
             Item={
                 "feed_url": "https://aws.amazon.com/blogs/aws/feed/",
                 "name": "AWS News Blog",
-                "category": "aws",
                 "channel_id": "CTEST12345",
                 "inserted_at": "2026-01-01T00:00:00+00:00",
                 "updated_at": "2026-01-01T00:00:00+00:00",
@@ -88,7 +87,6 @@ def integrated_aws_mock():
             Item={
                 "feed_url": "https://aws.amazon.com/blogs/aws/feed/",
                 "name": "AWS News Blog",
-                "category": "aws",
                 "channel_id": "CTEST12345",
                 "inserted_at": "2026-01-01T00:00:00+00:00",
                 "updated_at": "2026-01-01T00:00:00+00:00",

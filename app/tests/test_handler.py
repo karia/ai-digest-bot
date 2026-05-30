@@ -56,7 +56,6 @@ def test_handler_continues_on_channel_error(integrated_aws_mock):
         Item={
             "feed_url": "https://example.com/feed/",
             "name": "Example",
-            "category": "other",
             "channel_id": "COTHER999",
             "inserted_at": "2026-01-01T00:00:00+00:00",
             "updated_at": "2026-01-01T00:00:00+00:00",
