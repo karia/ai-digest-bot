@@ -1,5 +1,7 @@
 .PHONY: setup test lint lint-app lint-tf build deploy-infra deploy-app deploy deploy-infra-dry deploy-app-dry deploy-dry seed update-actions
 
+export PATH := $(HOME)/.local/share/mise/shims:$(PATH)
+
 setup:
 	mise install
 	uv sync

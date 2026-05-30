@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 .build/
 function.zip
+terraform/dummy.zip
 .terraform/
 *.tfstate*
 .terraform.lock.hcl
