@@ -7,7 +7,7 @@ local env = std.native('env');
   Handler: 'src.handler.lambda_handler',
   MemorySize: 512,
   Role: must_env('LAMBDA_ROLE_ARN'),
-  Runtime: 'python3.14',
+  Runtime: 'python3.13',
   Timeout: 300,
   Environment: {
     Variables: {

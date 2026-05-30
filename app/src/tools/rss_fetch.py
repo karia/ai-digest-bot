@@ -28,7 +28,8 @@ def rss_fetch(url: str) -> str:
 
     for entry in feed.entries:
         if hasattr(entry, "published_parsed") and entry.published_parsed:
-            pub = datetime(*entry.published_parsed[:6], tzinfo=UTC)
+            t = entry.published_parsed
+            pub = datetime(t[0], t[1], t[2], t[3], t[4], t[5], tzinfo=UTC)
             if pub < cutoff:
                 continue
         results.append(

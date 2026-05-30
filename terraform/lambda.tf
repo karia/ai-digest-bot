@@ -91,7 +91,7 @@ resource "aws_iam_role_policy_attachment" "lambda_bedrock" {
 resource "aws_lambda_function" "main" {
   function_name = var.project_name
   role          = aws_iam_role.lambda_exec.arn
-  runtime       = "python3.14"
+  runtime       = "python3.13"
   handler       = "src.handler.lambda_handler"
   timeout       = 300
   memory_size   = 512

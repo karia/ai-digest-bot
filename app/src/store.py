@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing import TypedDict, cast
 
 import boto3
 
@@ -19,10 +19,10 @@ def get_all_feeds() -> list[FeedItem]:
     table = dynamodb.Table(config.FEEDS_TABLE_NAME)
     items: list[FeedItem] = []
     response = table.scan()
-    items.extend(response["Items"])
+    items.extend(cast(list[FeedItem], response["Items"]))
     while "LastEvaluatedKey" in response:
         response = table.scan(ExclusiveStartKey=response["LastEvaluatedKey"])
-        items.extend(response["Items"])
+        items.extend(cast(list[FeedItem], response["Items"]))
     return items
 
 
