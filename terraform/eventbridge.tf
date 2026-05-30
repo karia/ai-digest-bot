@@ -33,12 +33,13 @@ resource "aws_scheduler_schedule" "daily_digest" {
     mode = "OFF"
   }
 
-  # UTC 23:00 = JST 08:00
-  schedule_expression          = "cron(0 23 * * ? *)"
+  # UTC 00:00 = JST 09:00
+  schedule_expression          = "cron(0 0 * * ? *)"
   schedule_expression_timezone = "Asia/Tokyo"
 
   target {
     arn      = aws_lambda_function.main.arn
     role_arn = aws_iam_role.scheduler.arn
+    input    = jsonencode({ scheduled_time = "<aws.scheduler.scheduled-time>" })
   }
 }
