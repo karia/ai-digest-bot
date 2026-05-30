@@ -1,6 +1,12 @@
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
+locals {
+  # Strip the inference-profile region prefix (e.g. "jp.") to get the base
+  # foundation model name used in foundation-model ARNs.
+  bedrock_foundation_model = replace(var.bedrock_model_id, "jp.", "")
+}
+
 # Dummy zip for initial deployment (lambroll handles actual code)
 data "archive_file" "dummy" {
   type        = "zip"
@@ -61,9 +67,15 @@ resource "aws_iam_policy" "lambda_bedrock" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
-      Resource = "arn:aws:bedrock:${data.aws_region.current.region}::foundation-model/${var.bedrock_model_id}"
+      Effect = "Allow"
+      Action = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+      Resource = [
+        # The inference profile the app invokes
+        "arn:aws:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:inference-profile/${var.bedrock_model_id}",
+        # Foundation models the jp profile routes to (ap-northeast-1 / ap-northeast-3)
+        "arn:aws:bedrock:ap-northeast-1::foundation-model/${local.bedrock_foundation_model}",
+        "arn:aws:bedrock:ap-northeast-3::foundation-model/${local.bedrock_foundation_model}",
+      ]
     }]
   })
 }
