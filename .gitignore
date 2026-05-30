@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.build/
+function.zip
+terraform/dummy.zip
+.terraform/
+*.tfstate*
+*.egg-info/
+dist/
+.venv/
+.ruff_cache/
+.mypy_cache/
+requirements.txt
