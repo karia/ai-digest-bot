@@ -30,7 +30,7 @@ build:
 	cd .build && zip -r ../function.zip .
 
 deploy-infra:
-	cd terraform && terraform init && terraform apply
+	cd terraform && terraform init && terraform apply -auto-approve
 
 deploy-infra-dry:
 	cd terraform && terraform init && terraform plan
