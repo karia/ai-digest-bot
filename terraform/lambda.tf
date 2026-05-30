@@ -91,6 +91,8 @@ resource "aws_iam_role_policy_attachment" "lambda_bedrock" {
 resource "aws_lambda_function" "main" {
   function_name = var.project_name
   role          = aws_iam_role.lambda_exec.arn
+  # python3.14 is not yet in the Terraform AWS provider validation list.
+  # lambroll (function.jsonnet) sets the actual runtime to python3.14 on deploy.
   runtime       = "python3.13"
   handler       = "src.handler.lambda_handler"
   timeout       = 300
@@ -110,6 +112,6 @@ resource "aws_lambda_function" "main" {
   }
 
   lifecycle {
-    ignore_changes = [filename, source_code_hash, layers]
+    ignore_changes = [filename, source_code_hash, layers, runtime]
   }
 }
