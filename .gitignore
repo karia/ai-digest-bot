@@ -5,7 +5,6 @@ function.zip
 terraform/dummy.zip
 .terraform/
 *.tfstate*
-.terraform.lock.hcl
 *.egg-info/
 dist/
 .venv/
