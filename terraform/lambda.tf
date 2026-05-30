@@ -31,8 +31,8 @@ resource "aws_iam_policy" "lambda_dynamodb" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect = "Allow"
-      Action = ["dynamodb:Scan", "dynamodb:GetItem"]
+      Effect   = "Allow"
+      Action   = ["dynamodb:Scan", "dynamodb:GetItem"]
       Resource = aws_dynamodb_table.feeds.arn
     }]
   })
@@ -47,7 +47,7 @@ resource "aws_iam_policy" "lambda_ssm" {
       Effect   = "Allow"
       Action   = ["ssm:GetParameter"]
       Resource = aws_ssm_parameter.slack_token.arn
-    }, {
+      }, {
       Effect   = "Allow"
       Action   = ["kms:Decrypt"]
       Resource = "arn:aws:kms:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:alias/aws/ssm"
@@ -61,8 +61,8 @@ resource "aws_iam_policy" "lambda_bedrock" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect = "Allow"
-      Action = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+      Effect   = "Allow"
+      Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
       Resource = "arn:aws:bedrock:${data.aws_region.current.name}::foundation-model/${var.bedrock_model_id}"
     }]
   })
