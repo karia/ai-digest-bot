@@ -91,25 +91,26 @@ resource "aws_iam_role_policy_attachment" "lambda_bedrock" {
 resource "aws_lambda_function" "main" {
   function_name = var.project_name
   role          = aws_iam_role.lambda_exec.arn
-  runtime       = "python3.14"
-  handler       = "src.handler.lambda_handler"
-  timeout       = 300
-  memory_size   = 512
   filename      = data.archive_file.dummy.output_path
 
-  environment {
-    variables = {
-      FEEDS_TABLE_NAME      = aws_dynamodb_table.feeds.name
-      SLACK_BOT_TOKEN_PARAM = aws_ssm_parameter.slack_token.name
-      BEDROCK_MODEL_ID      = var.bedrock_model_id
-    }
-  }
-
-  tracing_config {
-    mode = "Active"
-  }
+  # runtime and handler are required at creation time, but the source of truth
+  # for all runtime settings (runtime, handler, timeout, memory_size,
+  # environment, tracing_config) is app/function.jsonnet, applied by lambroll.
+  # These are placeholders for the initial create; see ignore_changes below.
+  runtime = "python3.14"
+  handler = "src.handler.lambda_handler"
 
   lifecycle {
-    ignore_changes = [filename, source_code_hash, layers]
+    ignore_changes = [
+      filename,
+      source_code_hash,
+      layers,
+      runtime,
+      handler,
+      timeout,
+      memory_size,
+      environment,
+      tracing_config,
+    ]
   }
 }

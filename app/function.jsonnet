@@ -7,8 +7,11 @@ local env = std.native('env');
   Handler: 'src.handler.lambda_handler',
   MemorySize: 512,
   Role: must_env('LAMBDA_ROLE_ARN'),
-  Runtime: 'python3.13',
+  Runtime: 'python3.14',
   Timeout: 300,
+  TracingConfig: {
+    Mode: 'Active',
+  },
   Environment: {
     Variables: {
       FEEDS_TABLE_NAME: must_env('FEEDS_TABLE_NAME'),
