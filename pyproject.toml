@@ -20,6 +20,7 @@ dev = [
     "ruff",
     "mypy",
     "boto3-stubs[dynamodb,ssm,bedrock-runtime]",
+    "botocore[crt]",
     "pre-commit",
 ]
 
