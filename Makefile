@@ -1,5 +1,7 @@
 .PHONY: setup test lint lint-app lint-tf build deploy-infra deploy-app deploy seed update-actions
 
+DRY_RUN ?=
+
 setup:
 	mise install
 	uv sync
@@ -28,7 +30,7 @@ build:
 	cd .build && zip -r ../function.zip .
 
 deploy-infra:
-	cd terraform && terraform init && terraform apply
+	cd terraform && terraform init && $(if $(DRY_RUN),terraform plan,terraform apply)
 
 deploy-app: build
 	cd app && \
@@ -36,7 +38,7 @@ deploy-app: build
 	  LAMBDA_ROLE_ARN="$$(terraform -chdir=../terraform output -raw lambda_role_arn)" \
 	  FEEDS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw feeds_table_name)" \
 	  SLACK_BOT_TOKEN_PARAM="$$(terraform -chdir=../terraform output -raw slack_token_param_name)" \
-	  lambroll deploy --function function.jsonnet
+	  lambroll $(if $(DRY_RUN),diff,deploy) --function function.jsonnet
 
 deploy: deploy-infra deploy-app
 
