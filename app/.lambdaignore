@@ -1,19 +1,16 @@
+# AWS SDK — bundled in the Lambda Python runtime, do not ship our own copy
+boto3/*
+botocore/*
+
 # Package metadata (not needed at runtime)
 *.dist-info*
 
-# Python bytecode
+# Compiled bytecode
 *.pyc
 *.pyo
 
-# Type stubs
+# Type stubs (not needed at runtime)
 *.pyi
 
-# Test suites bundled inside packages
+# Test suites bundled inside dependencies
 */tests/*
-*/test/*
-
-# Documentation bundled inside packages
-*/docs/*
-*/doc/*
-*.md
-*.rst

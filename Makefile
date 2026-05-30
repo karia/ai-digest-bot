@@ -1,4 +1,4 @@
-.PHONY: setup test lint lint-app lint-tf build deploy-infra deploy-app deploy deploy-infra-dry deploy-app-dry deploy-dry feeds-list feeds-add feeds-delete update-actions invoke
+.PHONY: setup test lint lint-app lint-tf build clean deploy-infra deploy-app deploy deploy-infra-dry deploy-app-dry deploy-dry feeds-list feeds-add feeds-delete update-actions invoke
 
 export PATH := $(HOME)/.local/share/mise/shims:$(PATH)
 
@@ -27,9 +27,9 @@ build:
 	rm -rf .build
 	uv pip install -r requirements.txt --target .build/
 	cp -r app/src .build/src
-	find .build/botocore/data -maxdepth 1 -mindepth 1 -type d \
-	  ! -name dynamodb ! -name ssm ! -name bedrock-runtime ! -name sts \
-	  -exec rm -rf {} +
+
+clean:
+	rm -rf .build requirements.txt function.zip
 
 deploy-infra:
 	cd terraform && terraform init && terraform apply -auto-approve
