@@ -14,7 +14,10 @@ logger = logging.getLogger(__name__)
 def _parse_scheduled_time(event: dict[str, Any]) -> datetime:
     raw = event.get("scheduled_time")
     if raw:
-        return datetime.fromisoformat(raw)
+        try:
+            return datetime.fromisoformat(raw)
+        except ValueError:
+            logger.warning("Invalid scheduled_time %r; falling back to now()", raw)
     return datetime.now(UTC)
 
 

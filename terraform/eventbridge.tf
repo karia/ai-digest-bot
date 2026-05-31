@@ -33,13 +33,16 @@ resource "aws_scheduler_schedule" "daily_digest" {
     mode = "OFF"
   }
 
-  # UTC 00:00 = JST 09:00
-  schedule_expression          = "cron(0 0 * * ? *)"
+  # JST 09:00 (timezone Asia/Tokyo)
+  schedule_expression          = "cron(0 9 * * ? *)"
   schedule_expression_timezone = "Asia/Tokyo"
 
   target {
     arn      = aws_lambda_function.main.arn
     role_arn = aws_iam_role.scheduler.arn
-    input    = jsonencode({ scheduled_time = "<aws.scheduler.scheduled-time>" })
+    # NOTE: do not use jsonencode() here. It escapes < and > to < / >,
+    # which breaks EventBridge Scheduler's <aws.scheduler.scheduled-time> context
+    # attribute substitution (the literal placeholder would reach the Lambda).
+    input = "{\"scheduled_time\": \"<aws.scheduler.scheduled-time>\"}"
   }
 }
