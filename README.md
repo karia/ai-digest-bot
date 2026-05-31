@@ -86,11 +86,14 @@ make invoke
 ```bash
 aws lambda invoke \
   --function-name <関数名> \
+  --invocation-type Event \
   --cli-binary-format raw-in-base64-out \
   --payload file://app/events/test_event.json \
   /dev/stdout
 ```
 
+> 非同期（`--invocation-type Event`）で起動します。実行に約1分かかり同期だとCLIの読み取りタイムアウト→リトライで多重起動するため、非同期にしています。結果（ダイジェスト・投稿状況）は標準出力ではなく CloudWatch Logs / Slack で確認してください。
+>
 > `scheduled_time` を省略した空の `{}` で invoke した場合は、実行時刻を基準にフォールバックします。
 
 ## フィード管理
