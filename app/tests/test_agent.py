@@ -8,57 +8,80 @@ SINCE = datetime(2026, 5, 31, 0, 0, 0, tzinfo=UTC)
 UNTIL = datetime(2026, 6, 1, 0, 0, 0, tzinfo=UTC)
 
 
+def _mock_result(text: str = "ダイジェスト"):
+    result = MagicMock()
+    result.__str__ = MagicMock(return_value=text)
+    return result
+
+
 def test_run_digest_returns_string():
     from src.agent import run_digest
 
-    mock_result = MagicMock()
-    mock_result.__str__ = MagicMock(return_value="テストダイジェスト本文")
-
     with patch("src.agent.Agent") as MockAgent:
-        instance = MockAgent.return_value
-        instance.return_value = mock_result
+        MockAgent.return_value.return_value = _mock_result("テストダイジェスト本文")
         result = run_digest(
-            ["https://aws.amazon.com/blogs/aws/feed/"], since=SINCE, until=UNTIL
+            ["https://aws.amazon.com/blogs/aws/feed/"],
+            since=SINCE,
+            until=UNTIL,
+            channel="C123",
+            title="AWS",
         )
 
-    assert isinstance(result, str)
     assert result == "テストダイジェスト本文"
 
 
-def test_run_digest_passes_urls_to_agent():
+def test_run_digest_passes_urls_period_and_channel_to_agent():
     from src.agent import run_digest
-
-    mock_result = MagicMock()
-    mock_result.__str__ = MagicMock(return_value="ダイジェスト")
 
     with patch("src.agent.Agent") as MockAgent:
         instance = MockAgent.return_value
-        instance.return_value = mock_result
+        instance.return_value = _mock_result()
         run_digest(
             ["https://example.com/feed1/", "https://example.com/feed2/"],
             since=SINCE,
             until=UNTIL,
+            channel="C999",
+            title="Example",
         )
 
-        call_args = instance.call_args[0][0]
-        assert "https://example.com/feed1/" in call_args
-        assert "https://example.com/feed2/" in call_args
-        assert "2026-05-31T00:00:00Z" in call_args
-        assert "2026-06-01T00:00:00Z" in call_args
+        prompt = instance.call_args[0][0]
+        assert "https://example.com/feed1/" in prompt
+        assert "https://example.com/feed2/" in prompt
+        assert "2026-05-31T00:00:00Z" in prompt
+        assert "2026-06-01T00:00:00Z" in prompt
+        assert "C999" in prompt
+
+
+def test_run_digest_registers_slack_post_tool():
+    from src.agent import run_digest
+    from src.tools.slack_post import slack_post
+
+    with patch("src.agent.Agent") as MockAgent:
+        MockAgent.return_value.return_value = _mock_result()
+        run_digest(
+            ["https://example.com/feed/"],
+            since=SINCE,
+            until=UNTIL,
+            channel="C1",
+            title="X",
+        )
+
+        tools = MockAgent.call_args.kwargs["tools"]
+        assert slack_post in tools
 
 
 def test_run_digest_logs_bedrock_io_at_info(caplog: pytest.LogCaptureFixture):
     from src.agent import run_digest
 
-    mock_result = MagicMock()
-    mock_result.__str__ = MagicMock(return_value="ダイジェスト出力")
-
     with patch("src.agent.Agent") as MockAgent:
-        instance = MockAgent.return_value
-        instance.return_value = mock_result
+        MockAgent.return_value.return_value = _mock_result("ダイジェスト出力")
         with caplog.at_level(logging.INFO, logger="src.agent"):
             run_digest(
-                ["https://aws.amazon.com/blogs/aws/feed/"], since=SINCE, until=UNTIL
+                ["https://aws.amazon.com/blogs/aws/feed/"],
+                since=SINCE,
+                until=UNTIL,
+                channel="C1",
+                title="X",
             )
 
     messages = "\n".join(r.getMessage() for r in caplog.records)
@@ -70,13 +93,10 @@ def test_run_digest_logs_bedrock_io_at_info(caplog: pytest.LogCaptureFixture):
 def test_run_digest_creates_new_agent_per_call():
     from src.agent import run_digest
 
-    mock_result = MagicMock()
-    mock_result.__str__ = MagicMock(return_value="ダイジェスト")
-
     with patch("src.agent.Agent") as MockAgent:
-        instance = MockAgent.return_value
-        instance.return_value = mock_result
-        run_digest(["https://example.com/feed/"], since=SINCE, until=UNTIL)
-        run_digest(["https://example.com/feed/"], since=SINCE, until=UNTIL)
+        MockAgent.return_value.return_value = _mock_result()
+        args = ["https://example.com/feed/"]
+        run_digest(args, since=SINCE, until=UNTIL, channel="C1", title="X")
+        run_digest(args, since=SINCE, until=UNTIL, channel="C1", title="X")
 
     assert MockAgent.call_count == 2

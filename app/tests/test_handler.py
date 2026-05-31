@@ -29,18 +29,14 @@ def test_handler_returns_ok_with_no_feeds(integrated_aws_mock):
     assert result["feeds"] == 0
 
 
-def test_handler_processes_feed_and_posts(integrated_aws_mock):
+def test_handler_processes_feed_via_run_digest(integrated_aws_mock):
     from src.handler import lambda_handler
 
     scheduled_time = "2026-06-01T00:00:00Z"
     expected_until = datetime.fromisoformat(scheduled_time)
     expected_since = expected_until - timedelta(hours=24)
 
-    mock_digest = "テストダイジェスト"
-    with (
-        patch("src.handler.run_digest", return_value=mock_digest) as mock_run,
-        patch("src.handler.post_digest") as mock_post,
-    ):
+    with patch("src.handler.run_digest", return_value="digest") as mock_run:
         result = lambda_handler({"scheduled_time": scheduled_time}, None)
 
     assert result["status"] == "ok"
@@ -50,16 +46,13 @@ def test_handler_processes_feed_and_posts(integrated_aws_mock):
         [feed_url],
         since=expected_since,
         until=expected_until,
+        channel="CTEST12345",
+        title="AWS News Blog",
     )
-    mock_post.assert_called_once()
-    call_args = mock_post.call_args
-    assert call_args[0][0] == "CTEST12345"
-    assert call_args[0][1] == mock_digest
-    assert call_args.kwargs["title"] == "AWS News Blog"
     assert result["results"][feed_url] == "success"
 
 
-def test_handler_posts_one_message_per_feed(integrated_aws_mock):
+def test_handler_processes_each_feed(integrated_aws_mock):
     import boto3
 
     dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
@@ -76,16 +69,11 @@ def test_handler_posts_one_message_per_feed(integrated_aws_mock):
 
     from src.handler import lambda_handler
 
-    with (
-        patch("src.handler.run_digest", return_value="digest") as mock_run,
-        patch("src.handler.post_digest") as mock_post,
-    ):
+    with patch("src.handler.run_digest", return_value="digest") as mock_run:
         result = lambda_handler({"scheduled_time": "2026-06-01T00:00:00Z"}, None)
 
-    # Two feeds in the same channel -> two separate digests and two posts.
     assert result["feeds"] == 2
     assert mock_run.call_count == 2
-    assert mock_post.call_count == 2
 
 
 def test_handler_continues_on_feed_error(integrated_aws_mock):
@@ -105,14 +93,12 @@ def test_handler_continues_on_feed_error(integrated_aws_mock):
 
     from src.handler import lambda_handler
 
-    def fail_for_feed(channel_id: str, digest: str, token: str, title: str) -> None:
+    def fail_for_feed(urls, since, until, channel, title):
         if title == "AWS News Blog":
-            raise RuntimeError("Slack error")
+            raise RuntimeError("boom")
+        return "digest"
 
-    with (
-        patch("src.handler.run_digest", return_value="digest"),
-        patch("src.handler.post_digest", side_effect=fail_for_feed),
-    ):
+    with patch("src.handler.run_digest", side_effect=fail_for_feed):
         result = lambda_handler({"scheduled_time": "2026-06-01T00:00:00Z"}, None)
 
     assert result["status"] == "ok"
@@ -135,7 +121,6 @@ def test_parse_scheduled_time_invalid_falls_back_to_now():
 
     from src.handler import _parse_scheduled_time
 
-    # The literal EventBridge placeholder must not crash the handler.
     before = datetime.now(UTC)
     dt = _parse_scheduled_time({"scheduled_time": "<aws.scheduler.scheduled-time>"})
     after = datetime.now(UTC)

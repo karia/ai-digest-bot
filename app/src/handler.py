@@ -2,10 +2,8 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from src import config
 from src.agent import run_digest
 from src.logging_config import configure_logging
-from src.slack_notifier import post_digest
 from src.store import get_all_feeds
 
 logger = logging.getLogger(__name__)
@@ -24,7 +22,6 @@ def _parse_scheduled_time(event: dict[str, Any]) -> datetime:
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     configure_logging()
 
-    token = config.get_slack_token()
     feeds = get_all_feeds()
     logger.info("Fetched %d feed(s) from DynamoDB", len(feeds))
 
@@ -46,8 +43,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             until.isoformat(),
         )
         try:
-            digest = run_digest([feed["feed_url"]], since=since, until=until)
-            post_digest(feed["channel_id"], digest, token, title=feed["name"])
+            run_digest(
+                [feed["feed_url"]],
+                since=since,
+                until=until,
+                channel=feed["channel_id"],
+                title=feed["name"],
+            )
             results[feed["feed_url"]] = "success"
             logger.info("Feed %s done", feed["name"])
         except Exception as e:
