@@ -7,7 +7,12 @@ from slack_sdk.errors import SlackApiError
 logger = logging.getLogger(__name__)
 
 
-def post_digest(channel_id: str, digest_text: str, token: str) -> None:
+def post_digest(
+    channel_id: str,
+    digest_text: str,
+    token: str,
+    title: str = "技術ダイジェスト",
+) -> None:
     client = WebClient(token=token)
     today = date.today().strftime("%Y年%m月%d日")
 
@@ -19,7 +24,7 @@ def post_digest(channel_id: str, digest_text: str, token: str) -> None:
                     "type": "header",
                     "text": {
                         "type": "plain_text",
-                        "text": f"AWS Blog Digest - {today}",
+                        "text": f"{title} - {today}",
                     },
                 },
                 {"type": "divider"},

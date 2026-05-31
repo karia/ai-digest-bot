@@ -54,6 +54,7 @@ def test_handler_processes_feeds_and_posts(integrated_aws_mock):
     call_args = mock_post.call_args
     assert call_args[0][0] == "CTEST12345"
     assert call_args[0][1] == mock_digest
+    assert call_args.kwargs["title"] == "AWS News Blog"
 
 
 def test_handler_continues_on_channel_error(integrated_aws_mock):
@@ -73,7 +74,9 @@ def test_handler_continues_on_channel_error(integrated_aws_mock):
 
     from src.handler import lambda_handler
 
-    def fail_for_channel(channel_id: str, digest: str, token: str) -> None:
+    def fail_for_channel(
+        channel_id: str, digest: str, token: str, title: str
+    ) -> None:
         if channel_id == "CTEST12345":
             raise RuntimeError("Slack error")
 

@@ -35,6 +35,34 @@ def test_post_digest_uses_block_kit():
         assert "section" in block_types
 
 
+def test_post_digest_uses_title_in_header():
+    from src.slack_notifier import post_digest
+
+    with patch("src.slack_notifier.WebClient") as MockClient:
+        instance = MockClient.return_value
+        instance.chat_postMessage.return_value = {"ok": True}
+
+        post_digest("CTEST12345", "test", "xoxb-test", title="AWS News Blog")
+
+        call_kwargs = instance.chat_postMessage.call_args[1]
+        header = next(b for b in call_kwargs["blocks"] if b["type"] == "header")
+        assert header["text"]["text"].startswith("AWS News Blog - ")
+
+
+def test_post_digest_default_title():
+    from src.slack_notifier import post_digest
+
+    with patch("src.slack_notifier.WebClient") as MockClient:
+        instance = MockClient.return_value
+        instance.chat_postMessage.return_value = {"ok": True}
+
+        post_digest("CTEST12345", "test", "xoxb-test")
+
+        call_kwargs = instance.chat_postMessage.call_args[1]
+        header = next(b for b in call_kwargs["blocks"] if b["type"] == "header")
+        assert header["text"]["text"].startswith("技術ダイジェスト - ")
+
+
 def test_post_digest_truncates_long_text():
     from src.slack_notifier import post_digest
 

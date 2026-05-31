@@ -5,7 +5,7 @@ from typing import Any
 from src import config
 from src.agent import run_digest
 from src.slack_notifier import post_digest
-from src.store import get_all_feeds, group_by_channel
+from src.store import FeedItem, get_all_feeds, group_by_channel
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +15,14 @@ def _parse_scheduled_time(event: dict[str, Any]) -> datetime:
     if raw:
         return datetime.fromisoformat(raw)
     return datetime.now(UTC)
+
+
+def _build_title(channel_feeds: list[FeedItem], max_len: int = 100) -> str:
+    """Build a Slack header title from the channel's feed names."""
+    title = " / ".join(f["name"] for f in channel_feeds)
+    if len(title) > max_len:
+        title = title[: max_len - 1] + "…"
+    return title
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -33,9 +41,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     for channel_id, channel_feeds in groups.items():
         urls = [f["feed_url"] for f in channel_feeds]
+        title = _build_title(channel_feeds)
         try:
             digest = run_digest(urls, since=since, until=until)
-            post_digest(channel_id, digest, token)
+            post_digest(channel_id, digest, token, title=title)
             results[channel_id] = "success"
         except Exception as e:
             logger.error("Failed for channel %s: %s", channel_id, e)
