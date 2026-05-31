@@ -28,9 +28,8 @@ make feeds-list / feeds-add FEED_URL=.. NAME=.. CHANNEL_ID=.. / feeds-delete FEE
 
 1. SSM Parameter Store から Slack Bot Token を取得（`config.get_slack_token`、モジュールキャッシュあり）
 2. DynamoDB `feeds` テーブルを全件 scan（`store.get_all_feeds`）。テーブルは `feed_url` を主キーとする単一テーブル
-3. `store.group_by_channel` で **channel_id ごとにフィードをまとめる**
-4. channel ごとに `agent.run_digest(urls, since, until)` を呼ぶ。`since = scheduled_time - 24h`
-5. 結果を `slack_notifier.post_digest` で Slack 投稿
+3. **フィード単位**でループし、1 フィードごとに `agent.run_digest([feed_url], since, until)` を呼ぶ。`since = scheduled_time - 24h`
+4. フィードごとに `slack_notifier.post_digest` で Slack 投稿（title はそのフィードの `name`）。1 フィード = 1 投稿。1 フィードが失敗しても他は続行し、結果は `feed_url` ごとに記録する
 
 **Agent の自律ツール選択がこの設計の核心**（`app/src/agent.py`）。`run_digest` は URL リストと期間を渡すだけで、Strands Agent が system prompt の指示に従い、URL の形式やレスポンスを見て 3 ツールのどれを使うか自分で決める:
 
