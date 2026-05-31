@@ -15,6 +15,7 @@ def post_digest(
 ) -> None:
     client = WebClient(token=token)
     today = date.today().strftime("%Y年%m月%d日")
+    logger.info("Posting digest to channel %s (title: %s)", channel_id, title)
 
     try:
         client.chat_postMessage(
@@ -38,4 +39,6 @@ def post_digest(
             ],
         )
     except SlackApiError as e:
-        raise RuntimeError(f"Slack API error: {e.response['error']}") from e
+        err = e.response["error"]
+        logger.error("Slack API error for channel %s: %s", channel_id, err)
+        raise RuntimeError(f"Slack API error: {err}") from e

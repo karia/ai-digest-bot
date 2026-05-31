@@ -1,9 +1,12 @@
+import logging
 from datetime import UTC, datetime
 from typing import Any, TypedDict, cast
 
 import boto3
 
 from src import config
+
+logger = logging.getLogger(__name__)
 
 
 class FeedItem(TypedDict):
@@ -27,6 +30,7 @@ def get_all_feeds() -> list[FeedItem]:
     while "LastEvaluatedKey" in response:
         response = table.scan(ExclusiveStartKey=response["LastEvaluatedKey"])
         items.extend(cast(list[FeedItem], response["Items"]))
+    logger.debug("Scanned %d feed(s) from %s", len(items), config.FEEDS_TABLE_NAME)
     return items
 
 

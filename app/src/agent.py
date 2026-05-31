@@ -43,5 +43,10 @@ def run_digest(feed_urls: list[str], since: datetime, until: datetime) -> str:
         f"rss_fetchを呼び出す際は"
         f' since="{since_iso}" until="{until_iso}" を必ず指定してください。'
     )
+    # Bedrock input/output is logged at INFO so the digest generation can be
+    # traced in normal operation, not only when DEBUG is enabled.
+    logger.info("Bedrock input: %s", prompt)
     result = agent(prompt)
-    return str(result)
+    output = str(result)
+    logger.info("Bedrock output: %s", output)
+    return output
