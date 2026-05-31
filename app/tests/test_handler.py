@@ -119,3 +119,24 @@ def test_handler_continues_on_feed_error(integrated_aws_mock):
     assert result["feeds"] == 2
     assert "error" in result["results"]["https://aws.amazon.com/blogs/aws/feed/"]
     assert result["results"]["https://example.com/feed/"] == "success"
+
+
+def test_parse_scheduled_time_valid_iso():
+    from datetime import UTC
+
+    from src.handler import _parse_scheduled_time
+
+    dt = _parse_scheduled_time({"scheduled_time": "2026-06-01T00:00:00Z"})
+    assert dt == datetime(2026, 6, 1, 0, 0, 0, tzinfo=UTC)
+
+
+def test_parse_scheduled_time_invalid_falls_back_to_now():
+    from datetime import UTC
+
+    from src.handler import _parse_scheduled_time
+
+    # The literal EventBridge placeholder must not crash the handler.
+    before = datetime.now(UTC)
+    dt = _parse_scheduled_time({"scheduled_time": "<aws.scheduler.scheduled-time>"})
+    after = datetime.now(UTC)
+    assert before <= dt <= after
