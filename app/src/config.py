@@ -22,3 +22,4 @@ BEDROCK_MODEL_ID: str = os.environ.get(
     "BEDROCK_MODEL_ID", "jp.anthropic.claude-opus-4-8"
 )
 AWS_REGION: str = os.environ.get("AWS_REGION", "ap-northeast-1")
+LOG_LEVEL: str = os.environ.get("LOG_LEVEL", "INFO")

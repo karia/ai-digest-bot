@@ -96,6 +96,28 @@ aws lambda invoke \
 >
 > `scheduled_time` を省略した空の `{}` で invoke した場合は、実行時刻を基準にフォールバックします。
 
+## ログ
+
+ログレベルは環境変数 `LOG_LEVEL`（既定 `INFO`）で制御します。`INFO` ではフィード処理状況と Bedrock への入力・出力が出力されます。`DEBUG` にすると各取得ツール（rss_fetch / web_scrape / api_fetch）の詳細も出ます（`botocore` などのライブラリは `WARNING` 固定で抑制）。
+
+デプロイ時に一時的に DEBUG へ切り替える:
+
+```bash
+LOG_LEVEL=DEBUG make deploy-app
+```
+
+INFO に戻す:
+
+```bash
+make deploy-app
+```
+
+ログ確認（CloudWatch Logs）:
+
+```bash
+aws logs tail "/aws/lambda/$(terraform -chdir=terraform output -raw lambda_function_name)" --since 10m --format short
+```
+
 ## フィード管理
 
 `feeds` テーブルの一覧・追加・削除は Make ターゲットで行います（内部で `scripts/manage_feeds.py` を実行）。

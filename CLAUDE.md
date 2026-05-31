@@ -39,6 +39,10 @@ make feeds-list / feeds-add FEED_URL=.. NAME=.. CHANNEL_ID=.. / feeds-delete FEE
 
 ツールを追加・変更したら `agent.py` の `tools=[...]` と SYSTEM_PROMPT も合わせて更新する。
 
+## ログ
+
+`handler` 冒頭で `logging_config.configure_logging()` を呼び、環境変数 `LOG_LEVEL`（既定 `INFO`）からルートロガーのレベルを設定する（`botocore` 等は `WARNING` 固定）。**Bedrock への入力・出力は `agent.py` で INFO ログ**として出すため、DEBUG にしなくても追える。`LOG_LEVEL=DEBUG make deploy-app` で一時的に DEBUG 化できる。
+
 ## Deploy の依存関係（重要）
 
 `lambroll deploy` は `app/function.jsonnet` を読み、`LAMBDA_FUNCTION_NAME` / `LAMBDA_ROLE_ARN` / `FEEDS_TABLE_NAME` / `SLACK_BOT_TOKEN_PARAM` を `must_env` で要求する。これらは Makefile が `terraform output` から注入する。よって **terraform apply 済みでないと deploy-app は失敗する**。

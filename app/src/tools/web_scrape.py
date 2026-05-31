@@ -17,6 +17,7 @@ def web_scrape(url: str) -> str:
     Returns:
         The extracted main text content of the page, truncated to 5000 characters.
     """
+    logger.debug("web_scrape: %s", url)
     try:
         response = requests.get(
             url,
@@ -25,6 +26,7 @@ def web_scrape(url: str) -> str:
         )
         response.raise_for_status()
     except requests.RequestException as e:
+        logger.warning("web_scrape failed for %s: %s", url, e)
         return f"Error fetching page: {e}"
 
     soup = BeautifulSoup(response.text, "html.parser")

@@ -23,10 +23,12 @@ def api_fetch(url: str, headers_json: str = "{}") -> str:
     except json.JSONDecodeError as e:
         return f"Invalid headers_json: {e}"
 
+    logger.debug("api_fetch: %s", url)
     try:
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
     except requests.RequestException as e:
+        logger.warning("api_fetch failed for %s: %s", url, e)
         return f"Error fetching API: {e}"
 
     try:

@@ -20,9 +20,11 @@ def rss_fetch(url: str, since: str, until: str) -> str:
         A formatted string with title, link, and description for each article in range,
         or a message indicating no articles were found in the range.
     """
+    logger.debug("rss_fetch: %s (%s..%s)", url, since, until)
     try:
         feed = feedparser.parse(url)
     except Exception as e:
+        logger.warning("rss_fetch failed for %s: %s", url, e)
         return f"Error fetching RSS feed: {e}"
 
     since_dt = datetime.fromisoformat(since)
