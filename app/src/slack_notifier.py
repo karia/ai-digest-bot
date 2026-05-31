@@ -1,10 +1,13 @@
 import logging
-from datetime import date
+from datetime import datetime, timedelta, timezone
 
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
 logger = logging.getLogger(__name__)
+
+# JST has no DST, so a fixed +9 offset is correct and avoids a tzdata dependency.
+JST = timezone(timedelta(hours=9))
 
 
 def post_digest(
@@ -14,7 +17,7 @@ def post_digest(
     title: str = "技術ダイジェスト",
 ) -> None:
     client = WebClient(token=token)
-    today = date.today().strftime("%Y年%m月%d日")
+    today = datetime.now(JST).strftime("%Y年%m月%d日")
     logger.info("Posting digest to channel %s (title: %s)", channel_id, title)
 
     try:

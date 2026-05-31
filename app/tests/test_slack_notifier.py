@@ -92,3 +92,21 @@ def test_post_digest_raises_on_slack_error():
 
         with pytest.raises(RuntimeError, match="Slack API error"):
             post_digest("CINVALID", "test", "xoxb-test")
+
+
+def test_post_digest_header_date_is_jst():
+    from datetime import datetime, timedelta, timezone
+
+    from src.slack_notifier import post_digest
+
+    jst_today = datetime.now(timezone(timedelta(hours=9))).strftime("%Y年%m月%d日")
+
+    with patch("src.slack_notifier.WebClient") as MockClient:
+        instance = MockClient.return_value
+        instance.chat_postMessage.return_value = {"ok": True}
+
+        post_digest("CTEST12345", "test", "xoxb-test", title="X")
+
+        call_kwargs = instance.chat_postMessage.call_args[1]
+        header = next(b for b in call_kwargs["blocks"] if b["type"] == "header")
+        assert header["text"]["text"] == f"X - {jst_today}"
