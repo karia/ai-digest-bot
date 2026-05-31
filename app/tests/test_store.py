@@ -29,33 +29,6 @@ def test_get_all_feeds_returns_empty_when_no_items(dynamodb_table):
     assert feeds == []
 
 
-def test_group_by_channel_single_channel(dynamodb_table):
-    from src.store import get_all_feeds, group_by_channel
-
-    feeds = get_all_feeds()
-    groups = group_by_channel(feeds)
-    assert "CTEST12345" in groups
-    assert len(groups["CTEST12345"]) == 1
-
-
-def test_group_by_channel_multiple_channels(dynamodb_table):
-    from src.store import get_all_feeds, group_by_channel
-
-    dynamodb_table.put_item(
-        Item={
-            "feed_url": "https://example.com/feed/",
-            "name": "Example Blog",
-            "channel_id": "COTHER999",
-            "inserted_at": "2026-01-01T00:00:00+00:00",
-            "updated_at": "2026-01-01T00:00:00+00:00",
-        }
-    )
-    feeds = get_all_feeds()
-    groups = group_by_channel(feeds)
-    assert "CTEST12345" in groups
-    assert "COTHER999" in groups
-
-
 def test_add_feed_creates_new_record(dynamodb_table):
     from src.store import add_feed, get_all_feeds
 

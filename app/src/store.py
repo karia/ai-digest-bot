@@ -49,11 +49,3 @@ def add_feed(feed_url: str, name: str, channel_id: str) -> None:
 def delete_feed(feed_url: str) -> None:
     table = _get_table()
     table.delete_item(Key={"feed_url": feed_url})
-
-
-def group_by_channel(feeds: list[FeedItem]) -> dict[str, list[FeedItem]]:
-    result: dict[str, list[FeedItem]] = {}
-    for feed in feeds:
-        ch = feed["channel_id"]
-        result.setdefault(ch, []).append(feed)
-    return result
