@@ -75,6 +75,8 @@ update-actions:
 invoke:
 	aws lambda invoke \
 	  --function-name "$$(terraform -chdir=terraform output -raw lambda_function_name)" \
+	  --invocation-type Event \
 	  --cli-binary-format raw-in-base64-out \
 	  --payload "$$(python3 -c "from datetime import UTC,datetime; print('{\"scheduled_time\":\"' + datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ') + '\"}')")" \
 	  /dev/stdout
+	@echo "Invoked asynchronously (StatusCode 202 = accepted). Check results in CloudWatch Logs / Slack."

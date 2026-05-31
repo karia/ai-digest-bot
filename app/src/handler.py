@@ -5,7 +5,7 @@ from typing import Any
 from src import config
 from src.agent import run_digest
 from src.slack_notifier import post_digest
-from src.store import FeedItem, get_all_feeds, group_by_channel
+from src.store import get_all_feeds
 
 logger = logging.getLogger(__name__)
 
@@ -17,37 +17,26 @@ def _parse_scheduled_time(event: dict[str, Any]) -> datetime:
     return datetime.now(UTC)
 
 
-def _build_title(channel_feeds: list[FeedItem], max_len: int = 100) -> str:
-    """Build a Slack header title from the channel's feed names."""
-    title = " / ".join(f["name"] for f in channel_feeds)
-    if len(title) > max_len:
-        title = title[: max_len - 1] + "…"
-    return title
-
-
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     token = config.get_slack_token()
     feeds = get_all_feeds()
 
     if not feeds:
         logger.info("No feeds found in DynamoDB")
-        return {"status": "ok", "channels": 0}
+        return {"status": "ok", "feeds": 0}
 
     until = _parse_scheduled_time(event)
     since = until - timedelta(hours=24)
 
-    groups = group_by_channel(feeds)
     results: dict[str, str] = {}
 
-    for channel_id, channel_feeds in groups.items():
-        urls = [f["feed_url"] for f in channel_feeds]
-        title = _build_title(channel_feeds)
+    for feed in feeds:
         try:
-            digest = run_digest(urls, since=since, until=until)
-            post_digest(channel_id, digest, token, title=title)
-            results[channel_id] = "success"
+            digest = run_digest([feed["feed_url"]], since=since, until=until)
+            post_digest(feed["channel_id"], digest, token, title=feed["name"])
+            results[feed["feed_url"]] = "success"
         except Exception as e:
-            logger.error("Failed for channel %s: %s", channel_id, e)
-            results[channel_id] = f"error: {e}"
+            logger.error("Failed for feed %s: %s", feed["feed_url"], e)
+            results[feed["feed_url"]] = f"error: {e}"
 
-    return {"status": "ok", "channels": len(groups), "results": results}
+    return {"status": "ok", "feeds": len(feeds), "results": results}

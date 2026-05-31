@@ -1,6 +1,6 @@
 # AWS Blog Digest Bot
 
-AWS Blog などの技術ブログフィードを日次で取得し、Bedrock 上の LLM エージェントが自律的にソースの取得・要約を行い、Slack チャンネルに日本語ダイジェストを 1 日 1 投稿する Lambda Bot です。
+AWS Blog などの技術ブログフィードを日次で取得し、Bedrock 上の LLM エージェントが自律的にソースの取得・要約を行い、Slack チャンネルに日本語ダイジェストをフィードごとに 1 投稿する Lambda Bot です。
 
 ## アーキテクチャ
 
@@ -9,15 +9,16 @@ EventBridge Schedule (cron: 毎日 JST 8:00)
   │
   ▼
 Lambda (Python 3.14 / uv)
-  ├─ DynamoDB: feeds テーブル → 購読URL一覧を取得
-  ├─ Strands Agents SDK でエージェントを起動
-  │   エージェントは以下のツールを自律的に選択して記事を取得:
-  │   ├─ rss_fetch: RSSフィードの取得・パース
-  │   ├─ web_scrape: RSS非対応ソースのWebページ取得
-  │   └─ api_fetch: API経由の取得
-  ├─ 取得した記事のうち過去24時間以内のものを抽出
-  ├─ エージェントが日本語ダイジェスト1本にまとめて要約
-  └─ Slack API (chat.postMessage) で投稿
+  ├─ DynamoDB: feeds テーブル → 購読フィード一覧を取得
+  └─ フィードごとに以下を実行（1 フィード = 1 Slack 投稿）:
+      ├─ Strands Agents SDK でエージェントを起動
+      │   エージェントは以下のツールを自律的に選択して記事を取得:
+      │   ├─ rss_fetch: RSSフィードの取得・パース
+      │   ├─ web_scrape: RSS非対応ソースのWebページ取得
+      │   └─ api_fetch: API経由の取得
+      ├─ 取得した記事のうち過去24時間以内のものを抽出
+      ├─ エージェントが日本語ダイジェストにまとめて要約
+      └─ Slack API (chat.postMessage) で投稿（タイトルはフィード名）
 ```
 
 ## セットアップ
@@ -85,11 +86,14 @@ make invoke
 ```bash
 aws lambda invoke \
   --function-name <関数名> \
+  --invocation-type Event \
   --cli-binary-format raw-in-base64-out \
   --payload file://app/events/test_event.json \
   /dev/stdout
 ```
 
+> 非同期（`--invocation-type Event`）で起動します。実行に約1分かかり同期だとCLIの読み取りタイムアウト→リトライで多重起動するため、非同期にしています。結果（ダイジェスト・投稿状況）は標準出力ではなく CloudWatch Logs / Slack で確認してください。
+>
 > `scheduled_time` を省略した空の `{}` で invoke した場合は、実行時刻を基準にフォールバックします。
 
 ## フィード管理
