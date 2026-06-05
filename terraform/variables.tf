@@ -11,7 +11,7 @@ variable "project_name" {
 }
 
 variable "bedrock_model_id" {
-  description = "Amazon Bedrock inference profile ID for the digest agent (Opus 4.8 requires an inference profile, not on-demand)"
+  description = "Amazon Bedrock inference profile ID for the digest agent (Claude models require an inference profile, not on-demand)"
   type        = string
-  default     = "jp.anthropic.claude-opus-4-8"
+  default     = "jp.anthropic.claude-sonnet-4-6"
 }
