@@ -25,7 +25,10 @@ lint-tf:
 build:
 	uv export --no-dev --no-hashes -o requirements.txt
 	rm -rf .build
-	uv pip install -r requirements.txt --target .build/
+	# Cross-platform install for the Lambda runtime (arm64 Linux); local OS/arch must not leak in.
+	# sgmllib3k is sdist-only but pure Python, so it is the sole source-build exception.
+	uv pip install -r requirements.txt --target .build/ \
+	  --python-platform aarch64-manylinux2014 --only-binary :all: --no-binary sgmllib3k
 	cp -r app/src .build/src
 
 clean:

@@ -47,7 +47,7 @@ make feeds-list / feeds-add FEED_URL=.. NAME=.. CHANNEL_ID=.. / feeds-delete FEE
 
 `lambroll deploy` は `app/function.jsonnet` を読み、`LAMBDA_FUNCTION_NAME` / `LAMBDA_ROLE_ARN` / `FEEDS_TABLE_NAME` / `SLACK_BOT_TOKEN_PARAM` を `must_env` で要求する。これらは Makefile が `terraform output` から注入する。よって **terraform apply 済みでないと deploy-app は失敗する**。
 
-Lambda zip は `make build` が生成（`uv pip install -r requirements.txt --target .build/` + `app/src` をコピー）。zip に含めない/含めるファイルは `app/.lambdaignore` で制御する（フラットなワイルドカードのみ、`!` や `**` は不可）。`*.dist-info` は opentelemetry の entry_points が実行時に必要なため除外不可。boto3/botocore は Lambda ランタイム同梱なので除外可。
+Lambda zip は `make build` が生成（`uv pip install -r requirements.txt --target .build/` + `app/src` をコピー）。Lambda は arm64 のため `--python-platform aarch64-manylinux2014 --only-binary :all:` でクロスインストールする（ローカルの OS/arch の wheel が混入すると `Runtime.ImportModuleError` になる。sdist のみの pure Python パッケージ `sgmllib3k` だけ `--no-binary` で例外）。zip に含めない/含めるファイルは `app/.lambdaignore` で制御する（フラットなワイルドカードのみ、`!` や `**` は不可）。`*.dist-info` は opentelemetry の entry_points が実行時に必要なため除外不可。boto3/botocore は Lambda ランタイム同梱なので除外可。
 
 ## Tests
 
