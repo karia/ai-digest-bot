@@ -2,6 +2,7 @@ local must_env = std.native('must_env');
 local env = std.native('env');
 
 {
+  Architectures: ['arm64'],
   FunctionName: must_env('LAMBDA_FUNCTION_NAME'),
   Description: 'AWS Blog Digest Bot - daily digest via Strands Agent + Bedrock',
   Handler: 'src.handler.lambda_handler',
