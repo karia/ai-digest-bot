@@ -36,7 +36,7 @@ def env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AWS_REGION", "ap-northeast-1")
     monkeypatch.setenv("FEEDS_TABLE_NAME", TABLE_NAME)
     monkeypatch.setenv("SLACK_BOT_TOKEN_PARAM", SSM_PARAM)
-    monkeypatch.setenv("BEDROCK_MODEL_ID", "jp.anthropic.claude-opus-4-8")
+    monkeypatch.setenv("BEDROCK_MODEL_ID", "jp.anthropic.claude-sonnet-4-6")
 
 
 @pytest.fixture

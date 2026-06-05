@@ -19,7 +19,7 @@ def get_slack_token() -> str:
 
 FEEDS_TABLE_NAME: str = os.environ["FEEDS_TABLE_NAME"]
 BEDROCK_MODEL_ID: str = os.environ.get(
-    "BEDROCK_MODEL_ID", "jp.anthropic.claude-opus-4-8"
+    "BEDROCK_MODEL_ID", "jp.anthropic.claude-sonnet-4-6"
 )
 AWS_REGION: str = os.environ.get("AWS_REGION", "ap-northeast-1")
 LOG_LEVEL: str = os.environ.get("LOG_LEVEL", "INFO")
