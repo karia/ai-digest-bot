@@ -14,7 +14,7 @@ terraform {
 
   # backend "s3" {
   #   bucket = "your-terraform-state-bucket"
-  #   key    = "aws-blog-digest/terraform.tfstate"
+  #   key    = "karia-ai-digest-bot/terraform.tfstate"
   #   region = "ap-northeast-1"
   # }
 }

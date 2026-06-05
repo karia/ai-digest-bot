@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "project_name" {
   description = "Project name used as a prefix for resource names"
   type        = string
-  default     = "aws-blog-digest"
+  default     = "karia-ai-digest-bot"
 }
 
 variable "bedrock_model_id" {
