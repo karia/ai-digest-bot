@@ -20,54 +20,36 @@ def test_run_digest_returns_string():
     with patch("src.agent.Agent") as MockAgent:
         MockAgent.return_value.return_value = _mock_result("テストダイジェスト本文")
         result = run_digest(
-            ["https://aws.amazon.com/blogs/aws/feed/"],
-            since=SINCE,
-            until=UNTIL,
-            channel="C123",
-            title="AWS",
+            "https://aws.amazon.com/blogs/aws/feed/", since=SINCE, until=UNTIL
         )
 
     assert result == "テストダイジェスト本文"
 
 
-def test_run_digest_passes_urls_period_and_channel_to_agent():
+def test_run_digest_passes_url_and_period_to_agent():
     from src.agent import run_digest
 
     with patch("src.agent.Agent") as MockAgent:
         instance = MockAgent.return_value
         instance.return_value = _mock_result()
-        run_digest(
-            ["https://example.com/feed1/", "https://example.com/feed2/"],
-            since=SINCE,
-            until=UNTIL,
-            channel="C999",
-            title="Example",
-        )
+        run_digest("https://example.com/feed1/", since=SINCE, until=UNTIL)
 
         prompt = instance.call_args[0][0]
         assert "https://example.com/feed1/" in prompt
-        assert "https://example.com/feed2/" in prompt
         assert "2026-05-31T00:00:00Z" in prompt
         assert "2026-06-01T00:00:00Z" in prompt
-        assert "C999" in prompt
 
 
-def test_run_digest_registers_slack_post_tool():
+def test_run_digest_does_not_register_a_slack_tool():
     from src.agent import run_digest
-    from src.tools.slack_post import slack_post
 
     with patch("src.agent.Agent") as MockAgent:
         MockAgent.return_value.return_value = _mock_result()
-        run_digest(
-            ["https://example.com/feed/"],
-            since=SINCE,
-            until=UNTIL,
-            channel="C1",
-            title="X",
-        )
+        run_digest("https://example.com/feed/", since=SINCE, until=UNTIL)
 
         tools = MockAgent.call_args.kwargs["tools"]
-        assert slack_post in tools
+        tool_names = {getattr(t, "__name__", "") for t in tools}
+        assert not any("slack" in n for n in tool_names)
 
 
 def test_run_digest_logs_bedrock_io_at_info(caplog: pytest.LogCaptureFixture):
@@ -77,11 +59,7 @@ def test_run_digest_logs_bedrock_io_at_info(caplog: pytest.LogCaptureFixture):
         MockAgent.return_value.return_value = _mock_result("ダイジェスト出力")
         with caplog.at_level(logging.INFO, logger="src.agent"):
             run_digest(
-                ["https://aws.amazon.com/blogs/aws/feed/"],
-                since=SINCE,
-                until=UNTIL,
-                channel="C1",
-                title="X",
+                "https://aws.amazon.com/blogs/aws/feed/", since=SINCE, until=UNTIL
             )
 
     messages = "\n".join(r.getMessage() for r in caplog.records)
@@ -95,8 +73,42 @@ def test_run_digest_creates_new_agent_per_call():
 
     with patch("src.agent.Agent") as MockAgent:
         MockAgent.return_value.return_value = _mock_result()
-        args = ["https://example.com/feed/"]
-        run_digest(args, since=SINCE, until=UNTIL, channel="C1", title="X")
-        run_digest(args, since=SINCE, until=UNTIL, channel="C1", title="X")
+        run_digest("https://example.com/feed/", since=SINCE, until=UNTIL)
+        run_digest("https://example.com/feed/", since=SINCE, until=UNTIL)
 
     assert MockAgent.call_count == 2
+
+
+def test_run_headline_returns_string():
+    from src.agent import run_headline
+
+    with patch("src.agent.Agent") as MockAgent:
+        MockAgent.return_value.return_value = _mock_result("注目のヘッドライン")
+        result = run_headline([("AWS", "本文A"), ("InfoQ", "本文B")])
+
+    assert result == "注目のヘッドライン"
+
+
+def test_run_headline_passes_names_and_bodies_to_agent():
+    from src.agent import run_headline
+
+    with patch("src.agent.Agent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.return_value = _mock_result()
+        run_headline([("AWS Blogs", "新サービス発表"), ("Publickey", "障害レポート")])
+
+        prompt = instance.call_args[0][0]
+        assert "AWS Blogs" in prompt
+        assert "新サービス発表" in prompt
+        assert "Publickey" in prompt
+        assert "障害レポート" in prompt
+
+
+def test_run_headline_uses_no_tools():
+    from src.agent import run_headline
+
+    with patch("src.agent.Agent") as MockAgent:
+        MockAgent.return_value.return_value = _mock_result()
+        run_headline([("AWS", "本文")])
+
+        assert MockAgent.call_args.kwargs["tools"] == []

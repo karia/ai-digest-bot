@@ -17,7 +17,7 @@ def get_slack_token() -> str:
     return _slack_token_cache
 
 
-FEEDS_TABLE_NAME: str = os.environ["FEEDS_TABLE_NAME"]
+SOURCES_TABLE_NAME: str = os.environ["SOURCES_TABLE_NAME"]
 BEDROCK_MODEL_ID: str = os.environ.get(
     "BEDROCK_MODEL_ID", "jp.anthropic.claude-sonnet-4-6"
 )

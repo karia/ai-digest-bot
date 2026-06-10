@@ -10,52 +10,55 @@ def reload_config():
     importlib.reload(cfg)
 
 
-def test_get_all_feeds_returns_items(dynamodb_table):
-    from src.store import get_all_feeds
+def test_get_all_sources_returns_items(dynamodb_table):
+    from src.store import get_all_sources
 
-    feeds = get_all_feeds()
-    assert len(feeds) == 1
-    assert feeds[0]["feed_url"] == "https://aws.amazon.com/blogs/aws/feed/"
-    assert feeds[0]["channel_id"] == "CTEST12345"
-
-
-def test_get_all_feeds_returns_empty_when_no_items(dynamodb_table):
-    from src.store import get_all_feeds
-
-    dynamodb_table.delete_item(
-        Key={"feed_url": "https://aws.amazon.com/blogs/aws/feed/"}
-    )
-    feeds = get_all_feeds()
-    assert feeds == []
+    sources = get_all_sources()
+    assert len(sources) == 1
+    assert sources[0]["title"] == "Tech Digest"
+    assert sources[0]["channel_id"] == "CTEST12345"
+    assert sources[0]["items"][0]["url"] == "https://aws.amazon.com/blogs/aws/feed/"
+    assert sources[0]["items"][0]["name"] == "AWS News Blog"
 
 
-def test_add_feed_creates_new_record(dynamodb_table):
-    from src.store import add_feed, get_all_feeds
+def test_get_all_sources_returns_empty_when_no_items(dynamodb_table):
+    from src.store import get_all_sources
 
-    add_feed("https://example.com/new/", "New Blog", "CNEW999")
-    feeds = {f["feed_url"]: f for f in get_all_feeds()}
-    assert "https://example.com/new/" in feeds
-    new = feeds["https://example.com/new/"]
-    assert new["name"] == "New Blog"
+    dynamodb_table.delete_item(Key={"title": "Tech Digest"})
+    sources = get_all_sources()
+    assert sources == []
+
+
+def test_add_source_creates_new_record(dynamodb_table):
+    from src.store import add_source, get_all_sources
+
+    items = [
+        {"url": "https://example.com/a", "name": "A"},
+        {"url": "https://example.com/b", "name": "B"},
+    ]
+    add_source("New Digest", "CNEW999", items)
+    sources = {s["title"]: s for s in get_all_sources()}
+    assert "New Digest" in sources
+    new = sources["New Digest"]
     assert new["channel_id"] == "CNEW999"
+    assert new["items"] == items
     assert new["inserted_at"] == new["updated_at"]
 
 
-def test_add_feed_preserves_inserted_at_on_update(dynamodb_table):
-    from src.store import add_feed, get_all_feeds
+def test_add_source_preserves_inserted_at_on_update(dynamodb_table):
+    from src.store import add_source, get_all_sources
 
-    url = "https://aws.amazon.com/blogs/aws/feed/"
-    add_feed(url, "Renamed", "CCHANGED")
-    feed = next(f for f in get_all_feeds() if f["feed_url"] == url)
-    assert feed["name"] == "Renamed"
-    assert feed["channel_id"] == "CCHANGED"
+    add_source("Tech Digest", "CCHANGED", [{"url": "https://x.example", "name": "X"}])
+    source = next(s for s in get_all_sources() if s["title"] == "Tech Digest")
+    assert source["channel_id"] == "CCHANGED"
+    assert source["items"] == [{"url": "https://x.example", "name": "X"}]
     # inserted_at is preserved from the fixture record, updated_at is refreshed
-    assert feed["inserted_at"] == "2026-01-01T00:00:00+00:00"
-    assert feed["updated_at"] != "2026-01-01T00:00:00+00:00"
+    assert source["inserted_at"] == "2026-01-01T00:00:00+00:00"
+    assert source["updated_at"] != "2026-01-01T00:00:00+00:00"
 
 
-def test_delete_feed_removes_record(dynamodb_table):
-    from src.store import delete_feed, get_all_feeds
+def test_delete_source_removes_record(dynamodb_table):
+    from src.store import delete_source, get_all_sources
 
-    delete_feed("https://aws.amazon.com/blogs/aws/feed/")
-    assert get_all_feeds() == []
+    delete_source("Tech Digest")
+    assert get_all_sources() == []
