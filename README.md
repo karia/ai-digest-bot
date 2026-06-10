@@ -12,16 +12,17 @@ Lambda (Python 3.14 / uv)
   ├─ DynamoDB: sources テーブル → 購読ソース一覧を取得
   │   （1 ソース = title + channel_id + items[{url, name}]）
   └─ ソースごとに以下を実行（1 ソース = 1 スレッド）:
-      ├─ ヘッドライン（title + 日付）のみのメッセージを投稿し ts を取得
-      └─ items の URL ごとに:
-          ├─ Strands Agents SDK でエージェントを起動
-          │   エージェントは以下のツールを自律的に選択して記事を取得:
-          │   ├─ rss_fetch: RSSフィードの取得・パース
-          │   ├─ web_scrape: RSS非対応ソースのWebページ取得
-          │   └─ api_fetch: API経由の取得
-          ├─ 過去24時間以内の記事を日本語ダイジェストに要約
-          └─ Slack API (chat.postMessage, thread_ts) でスレッド返信
-              （見出しは item の name。新着が無い URL も「新着なし」を返信）
+      ├─ items の URL ごとにダイジェストを生成（投稿はまだしない）:
+      │   ├─ Strands Agents SDK でエージェントを起動
+      │   │   エージェントは以下のツールを自律的に選択して記事を取得:
+      │   │   ├─ rss_fetch: RSSフィードの取得・パース
+      │   │   ├─ web_scrape: RSS非対応ソースのWebページ取得
+      │   │   └─ api_fetch: API経由の取得
+      │   └─ 過去24時間以内の記事を日本語ダイジェストに要約
+      ├─ 全ダイジェスト本文からヘッドライン文を生成（注目記事1〜2件に言及、リンクなし）
+      ├─ ヘッドライン（title + 日付 + ヘッドライン文）を投稿し ts を取得
+      └─ ダイジェストごとに Slack API (chat.postMessage, thread_ts) でスレッド返信
+          （見出しは item の name。新着が無い URL も「新着なし」を返信）
 ```
 
 ## セットアップ

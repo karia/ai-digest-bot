@@ -50,6 +50,28 @@ SYSTEM_PROMPT = """\
 - 本文以外（前置き・あいさつ・補足説明）は一切出力しない。
 """
 
+HEADLINE_SYSTEM_PROMPT = """\
+あなたは技術情報ダイジェストの編集者です。
+これからSlackスレッドの親メッセージとして表示される「ヘッドライン」を作成します。
+スレッド内には各フィードのダイジェストが返信として投稿済みで、
+その全文があなたへの入力として与えられます。
+
+# ヘッドラインの書き方
+- スレッド全体の導入文として、2〜3文・簡潔にまとめる。
+- 特に注目すべき記事を1〜2個だけ取り上げ、何が起きたかを一言で伝える。
+- リンクは張らない（URLや `<url|text>` 形式を含めない）。
+- すべてのフィードで新着が無い場合は、本日は新着がない旨を1文で伝える。
+
+# 出力スタイル（読者向け・重要）
+- 不特定多数のSlack読者がそのまま読む前提で、自然で分かりやすい日本語にする。
+- 取得処理や指示に関するメタな言及は一切含めない。
+- Slack mrkdwn で書く。強調は `*太字*`（アスタリスク1つ）。`#` や `**` は使わない。
+
+# 出力
+- 完成したヘッドライン本文のみを、あなたの最終メッセージとしてそのまま出力する。
+- 本文以外（前置き・あいさつ・補足説明）は一切出力しない。
+"""
+
 
 def run_digest(url: str, since: datetime, until: datetime) -> str:
     model = BedrockModel(
@@ -69,6 +91,33 @@ def run_digest(url: str, since: datetime, until: datetime) -> str:
         f"対象期間: {since_iso} から {until_iso} まで（UTC）\n"
         f'rss_fetchを呼び出す際は since="{since_iso}" until="{until_iso}"'
         f" を必ず指定してください。"
+    )
+    logger.info("Bedrock input: %s", prompt)
+    result = agent(prompt)
+    output = str(result)
+    logger.info("Bedrock output: %s", output)
+    return output
+
+
+def run_headline(digests: list[tuple[str, str]]) -> str:
+    """Generate the thread-parent headline from the completed digest bodies.
+
+    Args:
+        digests: (name, body) pairs of every digest posted into the thread.
+    """
+    model = BedrockModel(
+        model_id=config.BEDROCK_MODEL_ID,
+        region_name=config.AWS_REGION,
+    )
+    agent = Agent(
+        model=model,
+        tools=[],
+        system_prompt=HEADLINE_SYSTEM_PROMPT,
+    )
+    sections = "\n\n".join(f"## {name}\n{body}" for name, body in digests)
+    prompt = (
+        f"以下は本日スレッドに投稿される各フィードのダイジェスト全文です。"
+        f"これらを踏まえてヘッドラインを作成してください:\n\n{sections}"
     )
     logger.info("Bedrock input: %s", prompt)
     result = agent(prompt)

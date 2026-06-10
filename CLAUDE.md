@@ -28,8 +28,9 @@ make sources-list / sources-add TITLE=.. CHANNEL_ID=.. ITEMS="url|name .." / sou
 
 1. SSM Parameter Store から Slack Bot Token を取得（`config.get_slack_token`、モジュールキャッシュあり）
 2. DynamoDB `sources` テーブルを全件 scan（`store.get_all_sources`）。`title` を主キーとし、各アイテムは `channel_id` と `items`（`{url, name}` の配列）を持つ。1 アイテム = 1 スレッド
-3. **ソース単位**でループ。まず `slack_notifier.post_message(channel, header=...)` でヘッドラインのみ投稿し `ts` を取得（`since = scheduled_time - 24h`）
-4. ソースの `items` ごとに `agent.run_digest(url, since, until)` で本文テキストを得て、`slack_notifier.post_message(channel, text=body, header=name, thread_ts=ts)` でスレッド返信（1 URL = 1 返信、新着なしも返信）。1 件失敗しても続行し、結果は `url`（ヘッドライン失敗時は `title`）ごとに記録する
+3. **ソース単位**でループ。まず `items` 全件について `agent.run_digest(url, since, until)` で本文テキストを生成（`since = scheduled_time - 24h`。この時点では投稿しない）
+4. 全本文から `agent.run_headline([(name, body), ...])` でヘッドライン文を生成（注目記事1〜2件に言及、リンクなし。失敗時は空文字にフォールバック）し、`slack_notifier.post_message(channel, text=headline, header=...)` で親メッセージを投稿して `ts` を取得
+5. 生成済みダイジェストを順に `slack_notifier.post_message(channel, text=body, header=name, thread_ts=ts)` でスレッド返信（1 URL = 1 返信、新着なしも返信）。1 件失敗しても続行し、結果は `url`（ヘッドライン投稿失敗時は `title`）ごとに記録する
 
 **投稿は Python（handler）がオーケストレーションし、Agent は本文テキストを返すだけ**。Agent は Slack へ投稿しない（`slack_post` ツールは廃止）。
 

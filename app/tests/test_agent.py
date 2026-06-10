@@ -77,3 +77,38 @@ def test_run_digest_creates_new_agent_per_call():
         run_digest("https://example.com/feed/", since=SINCE, until=UNTIL)
 
     assert MockAgent.call_count == 2
+
+
+def test_run_headline_returns_string():
+    from src.agent import run_headline
+
+    with patch("src.agent.Agent") as MockAgent:
+        MockAgent.return_value.return_value = _mock_result("注目のヘッドライン")
+        result = run_headline([("AWS", "本文A"), ("InfoQ", "本文B")])
+
+    assert result == "注目のヘッドライン"
+
+
+def test_run_headline_passes_names_and_bodies_to_agent():
+    from src.agent import run_headline
+
+    with patch("src.agent.Agent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.return_value = _mock_result()
+        run_headline([("AWS Blogs", "新サービス発表"), ("Publickey", "障害レポート")])
+
+        prompt = instance.call_args[0][0]
+        assert "AWS Blogs" in prompt
+        assert "新サービス発表" in prompt
+        assert "Publickey" in prompt
+        assert "障害レポート" in prompt
+
+
+def test_run_headline_uses_no_tools():
+    from src.agent import run_headline
+
+    with patch("src.agent.Agent") as MockAgent:
+        MockAgent.return_value.return_value = _mock_result()
+        run_headline([("AWS", "本文")])
+
+        assert MockAgent.call_args.kwargs["tools"] == []

@@ -3,9 +3,9 @@ from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 from src import slack_notifier
-from src.agent import run_digest
+from src.agent import run_digest, run_headline
 from src.logging_config import configure_logging
-from src.store import get_all_sources
+from src.store import SourceItem, get_all_sources
 
 logger = logging.getLogger(__name__)
 
@@ -44,14 +44,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         channel = source["channel_id"]
         items = source["items"]
         header = f"{title} - {today}"
-        logger.info("Posting headline for source %s to %s", title, channel)
-        try:
-            thread_ts = slack_notifier.post_message(channel, header=header)
-        except Exception as e:
-            logger.error("Failed to post headline for %s: %s", title, e, exc_info=True)
-            results[title] = f"error: {e}"
-            continue
 
+        # Generate every digest first: the headline must summarize the whole
+        # thread, so nothing is posted until all bodies are ready.
+        digests: list[tuple[SourceItem, str]] = []
         for item in items:
             url = item["url"]
             name = item["name"]
@@ -64,13 +60,40 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             )
             try:
                 body = run_digest(url, since=since, until=until)
+                digests.append((item, body))
+            except Exception as e:
+                logger.error("Failed for %s: %s", url, e, exc_info=True)
+                results[url] = f"error: {e}"
+
+        try:
+            headline_body = run_headline([(it["name"], body) for it, body in digests])
+        except Exception as e:
+            logger.error(
+                "Headline generation failed for %s: %s", title, e, exc_info=True
+            )
+            headline_body = ""
+
+        logger.info("Posting headline for source %s to %s", title, channel)
+        try:
+            thread_ts = slack_notifier.post_message(
+                channel, text=headline_body, header=header
+            )
+        except Exception as e:
+            logger.error("Failed to post headline for %s: %s", title, e, exc_info=True)
+            results[title] = f"error: {e}"
+            continue
+
+        for item, body in digests:
+            url = item["url"]
+            name = item["name"]
+            try:
                 slack_notifier.post_message(
                     channel, text=body, header=name, thread_ts=thread_ts
                 )
                 results[url] = "success"
                 logger.info("Reply for %s done", name)
             except Exception as e:
-                logger.error("Failed for %s: %s", url, e, exc_info=True)
+                logger.error("Failed to post reply for %s: %s", url, e, exc_info=True)
                 results[url] = f"error: {e}"
 
     logger.info("Digest run complete: %s", results)
