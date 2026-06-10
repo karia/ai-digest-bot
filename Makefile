@@ -1,4 +1,4 @@
-.PHONY: setup test lint lint-app lint-tf build clean deploy-infra deploy-app deploy deploy-infra-dry deploy-app-dry deploy-dry sources-list sources-add sources-delete update-actions invoke
+.PHONY: setup test lint lint-app lint-tf build clean deploy-infra deploy-app deploy deploy-infra-dry deploy-app-dry deploy-dry sources-list sources-add sources-delete migrate update-actions invoke
 
 export PATH := $(HOME)/.local/share/mise/shims:$(PATH)
 
@@ -72,6 +72,12 @@ sources-add:
 sources-delete:
 	cd app && PYTHONPATH=. SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
 	  uv run python ../scripts/manage_sources.py delete --title "$(TITLE)"
+
+# One-off feeds -> sources data migration (idempotent). Optional: TITLE=...
+migrate:
+	cd app && PYTHONPATH=. SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
+	  MIGRATE_TITLE="$(TITLE)" \
+	  uv run python -m src.migrate
 
 update-actions:
 	pinact -u .github/workflows/ci.yml

@@ -18,6 +18,7 @@ make deploy-app            # build → lambroll deploy
 make deploy                # deploy-infra + deploy-app
 make invoke                # 現在時刻を scheduled_time として本番 Lambda を手動 invoke
 make sources-list / sources-add TITLE=.. CHANNEL_ID=.. ITEMS="url|name .." / sources-delete TITLE=..
+make migrate               # 旧 feeds テーブル → sources テーブルのデータ移行（冪等。移行済みなら no-op）
 ```
 
 ツールチェーン（Python 3.14, terraform, tflint, lambroll, aws-cli, pinact）は `mise` 管理。Python 依存は `uv`。`make *-dry` で apply/deploy の差分確認ができる。

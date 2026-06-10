@@ -148,6 +148,29 @@ make sources-add TITLE="技術ブログダイジェスト" CHANNEL_ID="CXXXXXXXX
 make sources-delete TITLE="技術ブログダイジェスト"
 ```
 
+## 旧 feeds テーブルからの移行
+
+旧スキーマ（`feeds` テーブル、1 行 = 1 フィード）で運用していた環境は、以下の手順で `sources` テーブルへ移行します。
+
+```bash
+# 1. インフラ更新（terraform の removed ブロックにより、旧 feeds テーブルは
+#    state から外れるだけで、テーブルとデータはそのまま残る）
+make deploy-infra
+
+# 2. データ移行（冪等: sources にデータがあれば何もしない。
+#    TITLE でスレッドのヘッドライン名を指定可能。既定は「技術ブログダイジェスト」）
+make migrate
+
+# 3. アプリをデプロイして動作確認
+make deploy-app
+make invoke
+
+# 4. Slack への投稿を確認できたら、旧テーブルを手動で削除
+aws dynamodb delete-table --table-name karia-ai-digest-bot-feeds
+```
+
+移行ルール: 旧 feeds を `channel_id` ごとに 1 ソースへ集約します（items は登録順）。チャンネルが複数ある場合、タイトルは `<TITLE> (<channel_id>)` になります。
+
 ## How to Contribute
 
 ### ローカル開発環境のセットアップ
