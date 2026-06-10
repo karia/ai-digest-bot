@@ -8,9 +8,9 @@ output "lambda_role_arn" {
   value       = aws_iam_role.lambda_exec.arn
 }
 
-output "feeds_table_name" {
-  description = "DynamoDB feeds table name"
-  value       = aws_dynamodb_table.feeds.name
+output "sources_table_name" {
+  description = "DynamoDB sources table name"
+  value       = aws_dynamodb_table.sources.name
 }
 
 output "slack_token_param_name" {

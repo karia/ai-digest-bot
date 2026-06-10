@@ -1,0 +1,79 @@
+"""Manage source records in DynamoDB (list / add / delete).
+
+A source is one Slack thread definition: a title (the daily headline), a target
+channel, and a list of items (url + display name). One crawl posts a headline
+message and one threaded reply per item.
+
+Run from the app/ directory so that the `src` package resolves, e.g.:
+    cd app && SOURCES_TABLE_NAME=... uv run python ../scripts/manage_sources.py list
+
+Prefer the Makefile wrappers: make sources-list / sources-add / sources-delete.
+"""
+
+import argparse
+
+from src.store import SourceItem, add_source, delete_source, get_all_sources
+
+
+def _parse_item(raw: str) -> SourceItem:
+    url, _, name = raw.partition("|")
+    if not url or not name:
+        raise argparse.ArgumentTypeError(
+            f'--item must be "url|name", got {raw!r}'
+        )
+    return {"url": url.strip(), "name": name.strip()}
+
+
+def cmd_list(args: argparse.Namespace) -> None:
+    sources = get_all_sources()
+    if not sources:
+        print("No sources registered.")
+        return
+    for source in sources:
+        print(f"# {source['title']}  ({source['channel_id']})  {source['inserted_at']}")
+        for item in source["items"]:
+            print(f"    - {item['name']:<25} {item['url']}")
+    print(f"\n{len(sources)} source(s).")
+
+
+def cmd_add(args: argparse.Namespace) -> None:
+    add_source(args.title, args.channel_id, args.item)
+    print(f"Added/updated: {args.title} -> {args.channel_id} ({len(args.item)} item(s))")
+
+
+def cmd_delete(args: argparse.Namespace) -> None:
+    delete_source(args.title)
+    print(f"Deleted: {args.title}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Manage source records in DynamoDB.")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("list", help="List all registered sources").set_defaults(
+        func=cmd_list
+    )
+
+    p_add = sub.add_parser("add", help="Add or update a source (full upsert)")
+    p_add.add_argument("--title", required=True, help="Headline title (partition key)")
+    p_add.add_argument("--channel-id", required=True, help="Slack channel ID")
+    p_add.add_argument(
+        "--item",
+        required=True,
+        action="append",
+        type=_parse_item,
+        metavar="URL|NAME",
+        help='Feed item as "url|name" (repeatable)',
+    )
+    p_add.set_defaults(func=cmd_add)
+
+    p_del = sub.add_parser("delete", help="Delete a source by title")
+    p_del.add_argument("--title", required=True, help="Title to delete")
+    p_del.set_defaults(func=cmd_delete)
+
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,10 +1,10 @@
-resource "aws_dynamodb_table" "feeds" {
-  name         = "${var.project_name}-feeds"
+resource "aws_dynamodb_table" "sources" {
+  name         = "${var.project_name}-sources"
   billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "feed_url"
+  hash_key     = "title"
 
   attribute {
-    name = "feed_url"
+    name = "title"
     type = "S"
   }
 

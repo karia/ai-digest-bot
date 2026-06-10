@@ -7,7 +7,7 @@ from slack_sdk.errors import SlackApiError
 @pytest.fixture(autouse=True)
 def _token(monkeypatch):
     monkeypatch.setattr(
-        "src.tools.slack_post.config.get_slack_token", lambda: "xoxb-test"
+        "src.slack_notifier.config.get_slack_token", lambda: "xoxb-test"
     )
 
 
@@ -17,47 +17,58 @@ def _ok_client(MockClient):
     return instance
 
 
-def test_slack_post_sends_mrkdwn_section_without_unfurl():
-    from src.tools.slack_post import slack_post
+def test_post_message_returns_ts_and_sends_mrkdwn_section():
+    from src.slack_notifier import post_message
 
-    with patch("src.tools.slack_post.WebClient") as MockClient:
+    with patch("src.slack_notifier.WebClient") as MockClient:
         instance = _ok_client(MockClient)
 
-        result = slack_post(
+        result = post_message(
             "C123", "*hello* <https://example.com|link>", header="Title"
         )
 
-        assert result.startswith("ok: ")
+        assert result == "1700000000.0001"
         kwargs = instance.chat_postMessage.call_args[1]
         assert kwargs["channel"] == "C123"
+        assert kwargs["thread_ts"] is None
         assert kwargs["unfurl_links"] is False
-        assert kwargs["unfurl_media"] is False
         blocks = kwargs["blocks"]
         assert blocks[0]["type"] == "header"
         section = next(b for b in blocks if b["type"] == "section")
-        assert section["text"]["type"] == "mrkdwn"
         assert section["text"]["text"] == "*hello* <https://example.com|link>"
 
 
-def test_slack_post_without_header_has_no_header_block():
-    from src.tools.slack_post import slack_post
+def test_post_message_headline_only_has_no_section():
+    from src.slack_notifier import post_message
 
-    with patch("src.tools.slack_post.WebClient") as MockClient:
+    with patch("src.slack_notifier.WebClient") as MockClient:
         instance = _ok_client(MockClient)
 
-        slack_post("C123", "body only")
+        post_message("C123", header="Headline")
 
         blocks = instance.chat_postMessage.call_args[1]["blocks"]
-        assert all(b["type"] != "header" for b in blocks)
+        assert blocks[0]["type"] == "header"
+        assert all(b["type"] != "section" for b in blocks)
 
 
-def test_slack_post_splits_long_text_into_multiple_sections():
-    from src.tools.slack_post import slack_post
+def test_post_message_passes_thread_ts():
+    from src.slack_notifier import post_message
 
-    with patch("src.tools.slack_post.WebClient") as MockClient:
+    with patch("src.slack_notifier.WebClient") as MockClient:
         instance = _ok_client(MockClient)
 
-        slack_post("C123", "a" * 7000)
+        post_message("C123", "body", thread_ts="111.222")
+
+        assert instance.chat_postMessage.call_args[1]["thread_ts"] == "111.222"
+
+
+def test_post_message_splits_long_text_into_multiple_sections():
+    from src.slack_notifier import post_message
+
+    with patch("src.slack_notifier.WebClient") as MockClient:
+        instance = _ok_client(MockClient)
+
+        post_message("C123", "a" * 7000)
 
         sections = [
             b
@@ -68,22 +79,22 @@ def test_slack_post_splits_long_text_into_multiple_sections():
         assert all(len(s["text"]["text"]) <= 3000 for s in sections)
 
 
-def test_slack_post_truncates_header():
-    from src.tools.slack_post import slack_post
+def test_post_message_truncates_header():
+    from src.slack_notifier import post_message
 
-    with patch("src.tools.slack_post.WebClient") as MockClient:
+    with patch("src.slack_notifier.WebClient") as MockClient:
         instance = _ok_client(MockClient)
 
-        slack_post("C123", "body", header="h" * 200)
+        post_message("C123", "body", header="h" * 200)
 
         header = instance.chat_postMessage.call_args[1]["blocks"][0]
         assert len(header["text"]["text"]) <= 150
 
 
-def test_slack_post_returns_error_on_slack_failure():
-    from src.tools.slack_post import slack_post
+def test_post_message_raises_on_slack_failure():
+    from src.slack_notifier import post_message
 
-    with patch("src.tools.slack_post.WebClient") as MockClient:
+    with patch("src.slack_notifier.WebClient") as MockClient:
         instance = MockClient.return_value
         mock_response = MagicMock()
         mock_response.__getitem__ = lambda self, key: (
@@ -91,6 +102,5 @@ def test_slack_post_returns_error_on_slack_failure():
         )
         instance.chat_postMessage.side_effect = SlackApiError("boom", mock_response)
 
-        result = slack_post("CBAD", "body")
-
-        assert result == "error: channel_not_found"
+        with pytest.raises(SlackApiError):
+            post_message("CBAD", "body")

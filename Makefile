@@ -1,4 +1,4 @@
-.PHONY: setup test lint lint-app lint-tf build clean deploy-infra deploy-app deploy deploy-infra-dry deploy-app-dry deploy-dry feeds-list feeds-add feeds-delete update-actions invoke
+.PHONY: setup test lint lint-app lint-tf build clean deploy-infra deploy-app deploy deploy-infra-dry deploy-app-dry deploy-dry sources-list sources-add sources-delete update-actions invoke
 
 export PATH := $(HOME)/.local/share/mise/shims:$(PATH)
 
@@ -44,7 +44,7 @@ deploy-app: build
 	cd app && \
 	  LAMBDA_FUNCTION_NAME="$$(terraform -chdir=../terraform output -raw lambda_function_name)" \
 	  LAMBDA_ROLE_ARN="$$(terraform -chdir=../terraform output -raw lambda_role_arn)" \
-	  FEEDS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw feeds_table_name)" \
+	  SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
 	  SLACK_BOT_TOKEN_PARAM="$$(terraform -chdir=../terraform output -raw slack_token_param_name)" \
 	  lambroll deploy --function function.jsonnet --src ../.build
 
@@ -52,7 +52,7 @@ deploy-app-dry: build
 	cd app && \
 	  LAMBDA_FUNCTION_NAME="$$(terraform -chdir=../terraform output -raw lambda_function_name)" \
 	  LAMBDA_ROLE_ARN="$$(terraform -chdir=../terraform output -raw lambda_role_arn)" \
-	  FEEDS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw feeds_table_name)" \
+	  SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
 	  SLACK_BOT_TOKEN_PARAM="$$(terraform -chdir=../terraform output -raw slack_token_param_name)" \
 	  lambroll diff --function function.jsonnet --src ../.build
 
@@ -60,17 +60,18 @@ deploy: deploy-infra deploy-app
 
 deploy-dry: deploy-infra-dry deploy-app-dry
 
-feeds-list:
-	cd app && PYTHONPATH=. FEEDS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw feeds_table_name)" \
-	  uv run python ../scripts/manage_feeds.py list
+sources-list:
+	cd app && PYTHONPATH=. SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
+	  uv run python ../scripts/manage_sources.py list
 
-feeds-add:
-	cd app && PYTHONPATH=. FEEDS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw feeds_table_name)" \
-	  uv run python ../scripts/manage_feeds.py add --feed-url "$(FEED_URL)" --name "$(NAME)" --channel-id "$(CHANNEL_ID)"
+# Usage: make sources-add TITLE="技術ダイジェスト" CHANNEL_ID="CXXXX" ITEMS="url1|name1 url2|name2"
+sources-add:
+	cd app && PYTHONPATH=. SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
+	  uv run python ../scripts/manage_sources.py add --title "$(TITLE)" --channel-id "$(CHANNEL_ID)" $(foreach it,$(ITEMS),--item "$(it)")
 
-feeds-delete:
-	cd app && PYTHONPATH=. FEEDS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw feeds_table_name)" \
-	  uv run python ../scripts/manage_feeds.py delete --feed-url "$(FEED_URL)"
+sources-delete:
+	cd app && PYTHONPATH=. SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
+	  uv run python ../scripts/manage_sources.py delete --title "$(TITLE)"
 
 update-actions:
 	pinact -u .github/workflows/ci.yml

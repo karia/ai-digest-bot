@@ -21,9 +21,28 @@ SAMPLE_RSS = """<?xml version="1.0"?>
   </channel>
 </rss>"""
 
-TABLE_NAME = "test-feeds"
+TABLE_NAME = "test-sources"
 SSM_PARAM = "/test/slack-bot-token"
 SLACK_TOKEN = "xoxb-test-token"
+
+SAMPLE_SOURCE = {
+    "title": "Tech Digest",
+    "channel_id": "CTEST12345",
+    "items": [
+        {"url": "https://aws.amazon.com/blogs/aws/feed/", "name": "AWS News Blog"},
+    ],
+    "inserted_at": "2026-01-01T00:00:00+00:00",
+    "updated_at": "2026-01-01T00:00:00+00:00",
+}
+
+
+def _create_sources_table(dynamodb):
+    return dynamodb.create_table(
+        TableName=TABLE_NAME,
+        KeySchema=[{"AttributeName": "title", "KeyType": "HASH"}],
+        AttributeDefinitions=[{"AttributeName": "title", "AttributeType": "S"}],
+        BillingMode="PAY_PER_REQUEST",
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -34,7 +53,7 @@ def env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AWS_SESSION_TOKEN", "testing")
     monkeypatch.setenv("AWS_DEFAULT_REGION", "ap-northeast-1")
     monkeypatch.setenv("AWS_REGION", "ap-northeast-1")
-    monkeypatch.setenv("FEEDS_TABLE_NAME", TABLE_NAME)
+    monkeypatch.setenv("SOURCES_TABLE_NAME", TABLE_NAME)
     monkeypatch.setenv("SLACK_BOT_TOKEN_PARAM", SSM_PARAM)
     monkeypatch.setenv("BEDROCK_MODEL_ID", "jp.anthropic.claude-sonnet-4-6")
 
@@ -43,21 +62,8 @@ def env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
 def dynamodb_table():
     with mock_aws():
         dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
-        table = dynamodb.create_table(
-            TableName=TABLE_NAME,
-            KeySchema=[{"AttributeName": "feed_url", "KeyType": "HASH"}],
-            AttributeDefinitions=[{"AttributeName": "feed_url", "AttributeType": "S"}],
-            BillingMode="PAY_PER_REQUEST",
-        )
-        table.put_item(
-            Item={
-                "feed_url": "https://aws.amazon.com/blogs/aws/feed/",
-                "name": "AWS News Blog",
-                "channel_id": "CTEST12345",
-                "inserted_at": "2026-01-01T00:00:00+00:00",
-                "updated_at": "2026-01-01T00:00:00+00:00",
-            }
-        )
+        table = _create_sources_table(dynamodb)
+        table.put_item(Item=SAMPLE_SOURCE)
         yield table
 
 
@@ -77,21 +83,8 @@ def ssm_parameter():
 def integrated_aws_mock():
     with mock_aws():
         dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
-        table = dynamodb.create_table(
-            TableName=TABLE_NAME,
-            KeySchema=[{"AttributeName": "feed_url", "KeyType": "HASH"}],
-            AttributeDefinitions=[{"AttributeName": "feed_url", "AttributeType": "S"}],
-            BillingMode="PAY_PER_REQUEST",
-        )
-        table.put_item(
-            Item={
-                "feed_url": "https://aws.amazon.com/blogs/aws/feed/",
-                "name": "AWS News Blog",
-                "channel_id": "CTEST12345",
-                "inserted_at": "2026-01-01T00:00:00+00:00",
-                "updated_at": "2026-01-01T00:00:00+00:00",
-            }
-        )
+        table = _create_sources_table(dynamodb)
+        table.put_item(Item=SAMPLE_SOURCE)
         ssm = boto3.client("ssm", region_name="ap-northeast-1")
         ssm.put_parameter(
             Name=SSM_PARAM,

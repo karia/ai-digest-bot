@@ -9,47 +9,52 @@ from src import config
 logger = logging.getLogger(__name__)
 
 
-class FeedItem(TypedDict):
-    feed_url: str
+class SourceItem(TypedDict):
+    url: str
     name: str
+
+
+class Source(TypedDict):
+    title: str
     channel_id: str
+    items: list[SourceItem]
     inserted_at: str
     updated_at: str
 
 
 def _get_table() -> Any:
     dynamodb = boto3.resource("dynamodb", region_name=config.AWS_REGION)
-    return dynamodb.Table(config.FEEDS_TABLE_NAME)
+    return dynamodb.Table(config.SOURCES_TABLE_NAME)
 
 
-def get_all_feeds() -> list[FeedItem]:
+def get_all_sources() -> list[Source]:
     table = _get_table()
-    items: list[FeedItem] = []
+    items: list[Source] = []
     response = table.scan()
-    items.extend(cast(list[FeedItem], response["Items"]))
+    items.extend(cast(list[Source], response["Items"]))
     while "LastEvaluatedKey" in response:
         response = table.scan(ExclusiveStartKey=response["LastEvaluatedKey"])
-        items.extend(cast(list[FeedItem], response["Items"]))
-    logger.debug("Scanned %d feed(s) from %s", len(items), config.FEEDS_TABLE_NAME)
+        items.extend(cast(list[Source], response["Items"]))
+    logger.debug("Scanned %d source(s) from %s", len(items), config.SOURCES_TABLE_NAME)
     return items
 
 
-def add_feed(feed_url: str, name: str, channel_id: str) -> None:
+def add_source(title: str, channel_id: str, items: list[SourceItem]) -> None:
     table = _get_table()
     now = datetime.now(UTC).isoformat()
-    existing = table.get_item(Key={"feed_url": feed_url}).get("Item")
+    existing = table.get_item(Key={"title": title}).get("Item")
     inserted_at = existing["inserted_at"] if existing else now
     table.put_item(
         Item={
-            "feed_url": feed_url,
-            "name": name,
+            "title": title,
             "channel_id": channel_id,
+            "items": cast(Any, items),
             "inserted_at": inserted_at,
             "updated_at": now,
         }
     )
 
 
-def delete_feed(feed_url: str) -> None:
+def delete_source(title: str) -> None:
     table = _get_table()
-    table.delete_item(Key={"feed_url": feed_url})
+    table.delete_item(Key={"title": title})

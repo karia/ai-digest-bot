@@ -39,7 +39,7 @@ resource "aws_iam_policy" "lambda_dynamodb" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["dynamodb:Scan", "dynamodb:GetItem"]
-      Resource = aws_dynamodb_table.feeds.arn
+      Resource = aws_dynamodb_table.sources.arn
     }]
   })
 }
