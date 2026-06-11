@@ -51,8 +51,10 @@ def slack_last_bot_post(channel: str, lookback_days: int = 14) -> str:
                 cursor=cursor,
             )
             # Messages come newest-first, so the first match is the latest post.
+            # System messages (e.g. channel_join) carry a subtype and also have
+            # user == bot, so only subtype-less ones count as real posts.
             for message in response["messages"]:
-                if message.get("user") == bot_user_id:
+                if message.get("user") == bot_user_id and "subtype" not in message:
                     ts = datetime.fromtimestamp(float(message["ts"]), tz=UTC)
                     return ts.strftime("%Y-%m-%dT%H:%M:%SZ")
             metadata: dict[str, Any] = response.get("response_metadata") or {}

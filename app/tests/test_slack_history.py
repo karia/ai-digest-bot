@@ -52,6 +52,26 @@ def test_returns_latest_bot_post_skipping_other_users():
         assert result == expected
 
 
+def test_skips_bot_system_messages_like_channel_join():
+    from src.tools.slack_history import slack_last_bot_post
+
+    with patch("src.tools.slack_history.WebClient") as MockClient:
+        _client(
+            MockClient,
+            [
+                {"user": "UBOT", "ts": "1700000200.0001", "subtype": "channel_join"},
+                {"user": "UBOT", "ts": "1700000100.0001"},
+            ],
+        )
+
+        result = slack_last_bot_post("C123")
+
+        expected = datetime.fromtimestamp(1700000100.0001, tz=UTC).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        assert result == expected
+
+
 def test_no_bot_post_returns_not_found_message():
     from src.tools.slack_history import slack_last_bot_post
 
