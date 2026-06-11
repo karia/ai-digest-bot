@@ -1,5 +1,5 @@
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from pydantic import BaseModel
 from strands import Agent
@@ -52,6 +52,44 @@ SYSTEM_PROMPT = """\
 - 完成したダイジェスト本文を、あなたの最終メッセージとしてそのまま出力する。
 - 投稿は呼び出し側が行うので、ツールでSlackへ投稿してはいけない。
 - 本文以外（前置き・あいさつ・補足説明）は一切出力しない。
+"""
+
+DAILY_SYSTEM_PROMPT = """\
+あなたは技術情報のダイジェストを作成する編集者です。
+与えられたURLから記事を取得し、日本時間（JST）の日付ごとに分類した
+日本語のダイジェストを作成してください。
+
+# 記事の取得
+- URLやレスポンスの内容から、適切な取得方法
+  （rss_fetch / web_scrape / api_fetch）を自律的に選ぶ。
+- 指定された時間範囲内に公開された記事のみを対象とする。
+
+# 日付ごとの分類（重要）
+- 各記事の公開時刻はUTCなので、+9時間した日本時間（JST）の日付で分類する。
+- 記事があった日だけを days に含める（日付昇順）。記事がゼロの日は含めない。
+- 対象期間内に記事が1件も無い場合は、days を空配列にする。
+
+# 各日の本文の方針
+- その日に公開された全記事を取り上げる。
+  各記事は日本語に訳したタイトルと、内容を端的に表す1行解説を付ける。
+- 各記事に元記事へのリンクを必ず添える。
+
+# 出力スタイル（読者向け・重要）
+- 不特定多数のSlack読者がそのまま読む前提で、自然で分かりやすい日本語にする。
+- 取得処理や指示に関するメタな言及は一切含めない。
+- 対象期間や日付そのものの見出しは本文に含めない（日付は呼び出し側が表示する）。
+
+# Slack mrkdwn 記法（重要）
+本文は Slack の mrkdwn で書く。通常の Markdown とは異なるので注意:
+- 強調・見出しは `*太字*`（アスタリスク1つ）を使う。
+  `#` や `**` は使わない（そのまま文字として表示されてしまう）。
+- 箇条書きは行頭に `•` を使う。
+- リンクは `<https://example.com|表示名>` の形式にする。
+  `[表示名](URL)` や裸のURLは使わない。
+
+# 出力
+- date: その日のJST日付。
+- body: その日のダイジェスト本文（mrkdwn）。本文以外（前置き・補足）は含めない。
 """
 
 HEADLINE_SYSTEM_PROMPT = """\
@@ -107,6 +145,19 @@ class DigestPlan(BaseModel):
     should_post: bool
     since: datetime | None
     reason: str
+
+
+class DailyDigest(BaseModel):
+    """Digest body for a single JST day."""
+
+    date: date
+    body: str
+
+
+class DailyDigests(BaseModel):
+    """Per-day digests for one feed; days without articles are omitted."""
+
+    days: list[DailyDigest]
 
 
 def run_plan(channel: str, posting_schedule: str, now: datetime) -> DigestPlan:
@@ -167,6 +218,39 @@ def run_digest(url: str, since: datetime, until: datetime) -> str:
     output = str(result)
     logger.info("Bedrock output: %s", output)
     return output
+
+
+def run_daily_digests(url: str, since: datetime, until: datetime) -> list[DailyDigest]:
+    """Generate one digest per JST day for the given feed URL.
+
+    Days without articles are omitted; an empty list means no articles in
+    the whole window.
+    """
+    model = BedrockModel(
+        model_id=config.BEDROCK_MODEL_ID,
+        region_name=config.AWS_REGION,
+    )
+    agent = Agent(
+        model=model,
+        tools=[rss_fetch, web_scrape, api_fetch],
+        system_prompt=DAILY_SYSTEM_PROMPT,
+    )
+    since_iso = since.strftime("%Y-%m-%dT%H:%M:%SZ")
+    until_iso = until.strftime("%Y-%m-%dT%H:%M:%SZ")
+    prompt = (
+        f"以下のURLから記事を取得して、JST日付ごとのダイジェストを作成してください:\n"
+        f"- {url}\n\n"
+        f"対象期間: {since_iso} から {until_iso} まで（UTC）\n"
+        f'rss_fetchを呼び出す際は since="{since_iso}" until="{until_iso}"'
+        f" を必ず指定してください。"
+    )
+    logger.info("Bedrock input: %s", prompt)
+    result = agent(prompt, structured_output_model=DailyDigests)
+    digests = result.structured_output
+    if not isinstance(digests, DailyDigests):
+        raise ValueError(f"daily digest agent returned no structured output: {result}")
+    logger.info("Bedrock output: %s", digests)
+    return digests.days
 
 
 def run_headline(
