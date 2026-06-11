@@ -57,6 +57,27 @@ def test_add_source_preserves_inserted_at_on_update(dynamodb_table):
     assert source["updated_at"] != "2026-01-01T00:00:00+00:00"
 
 
+def test_add_source_persists_posting_schedule(dynamodb_table):
+    from src.store import add_source, get_all_sources
+
+    add_source(
+        "New Digest",
+        "CNEW999",
+        [{"url": "https://example.com/a", "name": "A"}],
+        posting_schedule="月曜と木曜",
+    )
+    source = next(s for s in get_all_sources() if s["title"] == "New Digest")
+    assert source["posting_schedule"] == "月曜と木曜"
+
+
+def test_add_source_defaults_posting_schedule_to_daily(dynamodb_table):
+    from src.store import add_source, get_all_sources
+
+    add_source("New Digest", "CNEW999", [{"url": "https://example.com/a", "name": "A"}])
+    source = next(s for s in get_all_sources() if s["title"] == "New Digest")
+    assert source["posting_schedule"] == "毎日"
+
+
 def test_delete_source_removes_record(dynamodb_table):
     from src.store import delete_source, get_all_sources
 
