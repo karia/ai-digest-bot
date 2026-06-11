@@ -16,18 +16,31 @@ def reload_modules():
     importlib.reload(store)
 
 
-def _put_source(title, channel_id, items):
+@pytest.fixture(autouse=True)
+def mock_run_plan():
+    """Allow posting with the 24h-fallback window unless a test overrides it."""
+    from src.agent import DigestPlan
+
+    with patch(
+        "src.handler.run_plan",
+        return_value=DigestPlan(should_post=True, since=None, reason="毎日"),
+    ) as mock:
+        yield mock
+
+
+def _put_source(title, channel_id, items, posting_schedule=None):
     dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
     table = dynamodb.Table("test-sources")
-    table.put_item(
-        Item={
-            "title": title,
-            "channel_id": channel_id,
-            "items": items,
-            "inserted_at": "2026-01-01T00:00:00+00:00",
-            "updated_at": "2026-01-01T00:00:00+00:00",
-        }
-    )
+    item = {
+        "title": title,
+        "channel_id": channel_id,
+        "items": items,
+        "inserted_at": "2026-01-01T00:00:00+00:00",
+        "updated_at": "2026-01-01T00:00:00+00:00",
+    }
+    if posting_schedule is not None:
+        item["posting_schedule"] = posting_schedule
+    table.put_item(Item=item)
 
 
 def test_handler_returns_ok_with_no_sources(integrated_aws_mock):
@@ -207,6 +220,111 @@ def test_handler_records_error_when_headline_post_fails(integrated_aws_mock):
     # Headline post failed, so no replies are attempted for that source
     assert "error" in result["results"]["Tech Digest"]
     assert mock_post.call_count == 1
+
+
+def test_handler_uses_plan_since_for_digest(integrated_aws_mock, mock_run_plan):
+    from datetime import UTC
+
+    from src.agent import DigestPlan
+    from src.handler import lambda_handler
+
+    plan_since = datetime(2026, 5, 28, 1, 23, 45, tzinfo=UTC)
+    mock_run_plan.return_value = DigestPlan(
+        should_post=True, since=plan_since, reason="前回投稿から"
+    )
+
+    with (
+        patch("src.handler.run_digest", return_value="digest") as mock_run,
+        patch("src.handler.run_headline", return_value="summary"),
+        patch("src.handler.slack_notifier.post_message", return_value="t"),
+    ):
+        lambda_handler({"scheduled_time": "2026-06-01T00:00:00Z"}, None)
+
+    mock_run.assert_called_once_with(
+        "https://aws.amazon.com/blogs/aws/feed/",
+        since=plan_since,
+        until=datetime.fromisoformat("2026-06-01T00:00:00Z"),
+    )
+
+
+def test_handler_skips_source_not_scheduled_today(integrated_aws_mock, mock_run_plan):
+    from src.agent import DigestPlan
+    from src.handler import lambda_handler
+
+    mock_run_plan.return_value = DigestPlan(
+        should_post=False, since=None, reason="本日は投稿対象日ではない"
+    )
+
+    with (
+        patch("src.handler.run_digest") as mock_run,
+        patch("src.handler.slack_notifier.post_message") as mock_post,
+    ):
+        result = lambda_handler({"scheduled_time": "2026-06-01T00:00:00Z"}, None)
+
+    assert result["results"]["Tech Digest"] == "skipped: 本日は投稿対象日ではない"
+    mock_run.assert_not_called()
+    mock_post.assert_not_called()
+
+
+def test_handler_falls_back_to_24h_when_plan_fails(integrated_aws_mock, mock_run_plan):
+    from src.handler import lambda_handler
+
+    mock_run_plan.side_effect = RuntimeError("bedrock down")
+    scheduled_time = "2026-06-01T00:00:00Z"
+    expected_until = datetime.fromisoformat(scheduled_time)
+
+    with (
+        patch("src.handler.run_digest", return_value="digest") as mock_run,
+        patch("src.handler.run_headline", return_value="summary"),
+        patch("src.handler.slack_notifier.post_message", return_value="t"),
+    ):
+        result = lambda_handler({"scheduled_time": scheduled_time}, None)
+
+    # The digest still runs, degraded to the fixed 24h window
+    mock_run.assert_called_once_with(
+        "https://aws.amazon.com/blogs/aws/feed/",
+        since=expected_until - timedelta(hours=24),
+        until=expected_until,
+    )
+    assert result["results"]["https://aws.amazon.com/blogs/aws/feed/"] == "success"
+
+
+def test_handler_passes_schedule_to_plan(integrated_aws_mock, mock_run_plan):
+    _put_source(
+        "Tech Digest",
+        "CTEST12345",
+        [{"url": "https://example.com/a", "name": "A"}],
+        posting_schedule="月曜と木曜",
+    )
+
+    from src.handler import lambda_handler
+
+    with (
+        patch("src.handler.run_digest", return_value="digest"),
+        patch("src.handler.run_headline", return_value="summary"),
+        patch("src.handler.slack_notifier.post_message", return_value="t"),
+    ):
+        lambda_handler({"scheduled_time": "2026-06-01T00:00:00Z"}, None)
+
+    mock_run_plan.assert_called_once_with(
+        "CTEST12345", "月曜と木曜", datetime.fromisoformat("2026-06-01T00:00:00Z")
+    )
+
+
+def test_handler_passes_default_schedule_when_field_missing(
+    integrated_aws_mock, mock_run_plan
+):
+    # SAMPLE_SOURCE in conftest has no posting_schedule (pre-#28 record)
+    from src.handler import lambda_handler
+
+    with (
+        patch("src.handler.run_digest", return_value="digest"),
+        patch("src.handler.run_headline", return_value="summary"),
+        patch("src.handler.slack_notifier.post_message", return_value="t"),
+    ):
+        lambda_handler({"scheduled_time": "2026-06-01T00:00:00Z"}, None)
+
+    assert mock_run_plan.call_args[0][1] == "毎日"
 
 
 def test_parse_scheduled_time_valid_iso():

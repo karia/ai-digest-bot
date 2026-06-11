@@ -1,16 +1,14 @@
 import logging
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from src import slack_notifier
-from src.agent import run_digest, run_headline
+from src.agent import run_digest, run_headline, run_plan
+from src.config import JST
 from src.logging_config import configure_logging
 from src.store import SourceItem, get_all_sources
 
 logger = logging.getLogger(__name__)
-
-# JST has no DST, so a fixed +9 offset is correct and avoids a tzdata dependency.
-JST = timezone(timedelta(hours=9))
 
 
 def _parse_scheduled_time(event: dict[str, Any]) -> datetime:
@@ -34,7 +32,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return {"status": "ok", "sources": 0}
 
     until = _parse_scheduled_time(event)
-    since = until - timedelta(hours=24)
     today = datetime.now(JST).strftime("%Y年%m月%d日")
 
     results: dict[str, str] = {}
@@ -44,6 +41,19 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         channel = source["channel_id"]
         items = source["items"]
         header = f"{title} - {today}"
+
+        # The plan agent interprets the free-text schedule and derives `since`
+        # from the bot's last post in the channel (24h ago when unavailable).
+        try:
+            plan = run_plan(channel, source.get("posting_schedule", "毎日"), until)
+        except Exception as e:
+            logger.error("Plan failed for %s: %s", title, e, exc_info=True)
+            plan = None
+        if plan and not plan.should_post:
+            logger.info("Skipping %s: %s", title, plan.reason)
+            results[title] = f"skipped: {plan.reason}"
+            continue
+        since = (plan and plan.since) or (until - timedelta(hours=24))
 
         # Generate every digest first: the headline must summarize the whole
         # thread, so nothing is posted until all bodies are ready.
