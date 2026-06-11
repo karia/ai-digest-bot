@@ -333,6 +333,111 @@ def test_handler_passes_default_schedule_when_field_missing(
     assert mock_run_plan.call_args[0][1] == "毎日"
 
 
+def test_handler_splits_daily_item_into_one_reply_per_day(integrated_aws_mock):
+    from datetime import date
+
+    from src.agent import DailyDigest
+    from src.handler import lambda_handler
+
+    _put_source(
+        "Tech Digest",
+        "CTEST12345",
+        [
+            {
+                "url": "https://example.com/whatsnew",
+                "name": "What's New",
+                "split_by_day": True,
+            }
+        ],
+    )
+    days = [
+        DailyDigest(date=date(2026, 6, 9), body="day1 body"),
+        DailyDigest(date=date(2026, 6, 10), body="day2 body"),
+    ]
+
+    with (
+        patch("src.handler.run_daily_digests", return_value=days),
+        patch("src.handler.run_headline", return_value="summary") as mock_headline,
+        patch("src.handler.slack_notifier.post_message", return_value="t") as mock_post,
+    ):
+        result = lambda_handler({"scheduled_time": "2026-06-11T00:00:00Z"}, None)
+
+    # 1 headline + 1 reply per day
+    assert mock_post.call_count == 3
+    day1, day2 = mock_post.call_args_list[1], mock_post.call_args_list[2]
+    assert day1.kwargs["header"] == "What's New (06/09)"
+    assert day1.kwargs["text"] == "day1 body"
+    assert day2.kwargs["header"] == "What's New (06/10)"
+    assert day2.kwargs["text"] == "day2 body"
+    assert result["results"]["https://example.com/whatsnew"] == "success"
+    # The headline input carries the per-day names
+    assert mock_headline.call_args[0][0] == [
+        ("What's New (06/09)", "day1 body"),
+        ("What's New (06/10)", "day2 body"),
+    ]
+
+
+def test_handler_posts_no_reply_for_daily_item_without_articles(integrated_aws_mock):
+    from src.handler import lambda_handler
+
+    _put_source(
+        "Tech Digest",
+        "CTEST12345",
+        [
+            {
+                "url": "https://example.com/whatsnew",
+                "name": "What's New",
+                "split_by_day": True,
+            },
+            {"url": "https://example.com/a", "name": "A"},
+        ],
+    )
+
+    with (
+        patch("src.handler.run_daily_digests", return_value=[]),
+        patch("src.handler.run_digest", return_value="digest"),
+        patch("src.handler.run_headline", return_value="summary"),
+        patch("src.handler.slack_notifier.post_message", return_value="t") as mock_post,
+    ):
+        result = lambda_handler({"scheduled_time": "2026-06-11T00:00:00Z"}, None)
+
+    # headline + the normal item's reply only; nothing for the empty daily item
+    assert mock_post.call_count == 2
+    assert mock_post.call_args_list[1].kwargs["header"] == "A"
+    assert result["results"]["https://example.com/whatsnew"] == "no articles"
+    assert result["results"]["https://example.com/a"] == "success"
+
+
+def test_handler_records_error_when_daily_digest_fails(integrated_aws_mock):
+    from src.handler import lambda_handler
+
+    _put_source(
+        "Tech Digest",
+        "CTEST12345",
+        [
+            {
+                "url": "https://example.com/whatsnew",
+                "name": "What's New",
+                "split_by_day": True,
+            },
+            {"url": "https://example.com/a", "name": "A"},
+        ],
+    )
+
+    with (
+        patch("src.handler.run_daily_digests", side_effect=RuntimeError("boom")),
+        patch("src.handler.run_digest", return_value="digest"),
+        patch("src.handler.run_headline", return_value="summary"),
+        patch("src.handler.slack_notifier.post_message", return_value="t") as mock_post,
+    ):
+        result = lambda_handler({"scheduled_time": "2026-06-11T00:00:00Z"}, None)
+
+    # The failed daily item is skipped; the normal item is still posted
+    assert "error" in result["results"]["https://example.com/whatsnew"]
+    assert result["results"]["https://example.com/a"] == "success"
+    assert mock_post.call_count == 2
+
+
 def test_parse_scheduled_time_valid_iso():
     from datetime import UTC
 
