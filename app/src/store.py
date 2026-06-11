@@ -12,6 +12,9 @@ logger = logging.getLogger(__name__)
 class SourceItem(TypedDict):
     url: str
     name: str
+    # True: post one threaded reply per JST day (days without articles are
+    # skipped) instead of a single reply covering the whole window.
+    split_by_day: NotRequired[bool]
 
 
 class Source(TypedDict):
