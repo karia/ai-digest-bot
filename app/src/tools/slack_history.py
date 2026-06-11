@@ -38,15 +38,20 @@ def slack_last_bot_post(channel: str, lookback_days: int = 14) -> str:
         "slack_last_bot_post: channel=%s lookback_days=%d", channel, lookback_days
     )
     client = WebClient(token=config.get_slack_token())
-    oldest = datetime.now(UTC) - timedelta(days=lookback_days)
+    cutoff = datetime.now(UTC) - timedelta(days=lookback_days)
+    not_found = f"No bot post found in the last {lookback_days} days."
 
     try:
         bot_user_id = _get_bot_user_id(client)
         cursor: str | None = None
         while True:
+            # Passing `oldest` anchors pagination at the old end of the range
+            # (the first page holds the oldest messages), which would make the
+            # first match the bot's *oldest* post in a busy channel. Leaving it
+            # out keeps pagination anchored at the newest message and the
+            # lookback window is enforced client-side via `cutoff` instead.
             response = client.conversations_history(
                 channel=channel,
-                oldest=str(oldest.timestamp()),
                 limit=200,
                 cursor=cursor,
             )
@@ -54,13 +59,15 @@ def slack_last_bot_post(channel: str, lookback_days: int = 14) -> str:
             # System messages (e.g. channel_join) carry a subtype and also have
             # user == bot, so only subtype-less ones count as real posts.
             for message in response["messages"]:
+                ts = datetime.fromtimestamp(float(message["ts"]), tz=UTC)
+                if ts < cutoff:
+                    return not_found
                 if message.get("user") == bot_user_id and "subtype" not in message:
-                    ts = datetime.fromtimestamp(float(message["ts"]), tz=UTC)
                     return ts.strftime("%Y-%m-%dT%H:%M:%SZ")
             metadata: dict[str, Any] = response.get("response_metadata") or {}
             cursor = metadata.get("next_cursor")
             if not cursor:
-                return f"No bot post found in the last {lookback_days} days."
+                return not_found
     except Exception as e:
         logger.warning("slack_last_bot_post failed for %s: %s", channel, e)
         return f"Error fetching Slack history: {e}"
