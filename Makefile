@@ -64,10 +64,11 @@ sources-list:
 	cd app && PYTHONPATH=. SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
 	  uv run python ../scripts/manage_sources.py list
 
-# Usage: make sources-add TITLE="技術ダイジェスト" CHANNEL_ID="CXXXX" ITEMS="url1|name1 url2|name2"
+# Usage: make sources-add TITLE="技術ダイジェスト" CHANNEL_ID="CXXXX" ITEMS="url1|name1 url2|name2" [POSTING_SCHEDULE="月曜と木曜"]
+# Note: full upsert — omitting POSTING_SCHEDULE on re-add resets the schedule to 毎日.
 sources-add:
 	cd app && PYTHONPATH=. SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
-	  uv run python ../scripts/manage_sources.py add --title "$(TITLE)" --channel-id "$(CHANNEL_ID)" $(foreach it,$(ITEMS),--item "$(it)")
+	  uv run python ../scripts/manage_sources.py add --title "$(TITLE)" --channel-id "$(CHANNEL_ID)" $(foreach it,$(ITEMS),--item "$(it)") $(if $(POSTING_SCHEDULE),--posting-schedule "$(POSTING_SCHEDULE)")
 
 sources-delete:
 	cd app && PYTHONPATH=. SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \

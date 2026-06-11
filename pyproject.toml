@@ -10,6 +10,7 @@ dependencies = [
     "requests",
     "boto3",
     "slack-sdk",
+    "pydantic",
 ]
 
 [dependency-groups]

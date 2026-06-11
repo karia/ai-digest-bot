@@ -1,6 +1,6 @@
 import logging
 from datetime import UTC, datetime
-from typing import Any, TypedDict, cast
+from typing import Any, NotRequired, TypedDict, cast
 
 import boto3
 
@@ -18,6 +18,9 @@ class Source(TypedDict):
     title: str
     channel_id: str
     items: list[SourceItem]
+    # Free-text posting schedule interpreted by the plan agent (e.g. "毎日",
+    # "月曜と木曜"). Records written before this field exist mean "毎日".
+    posting_schedule: NotRequired[str]
     inserted_at: str
     updated_at: str
 
@@ -39,7 +42,12 @@ def get_all_sources() -> list[Source]:
     return items
 
 
-def add_source(title: str, channel_id: str, items: list[SourceItem]) -> None:
+def add_source(
+    title: str,
+    channel_id: str,
+    items: list[SourceItem],
+    posting_schedule: str = "毎日",
+) -> None:
     table = _get_table()
     now = datetime.now(UTC).isoformat()
     existing = table.get_item(Key={"title": title}).get("Item")
@@ -49,6 +57,7 @@ def add_source(title: str, channel_id: str, items: list[SourceItem]) -> None:
             "title": title,
             "channel_id": channel_id,
             "items": cast(Any, items),
+            "posting_schedule": posting_schedule,
             "inserted_at": inserted_at,
             "updated_at": now,
         }
