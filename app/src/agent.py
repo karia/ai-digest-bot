@@ -36,6 +36,8 @@ SYSTEM_PROMPT = """\
   「RSSフィードから」等の裏側の説明は書かない。読者は記事内容だけを読みたい。
 - 時刻を書く場合は必ず日本時間（JST）で表記する。
   受け取る時刻はUTCなので、+9時間して「YYYY-MM-DD HH:MM JST」のように書く。
+- 対象期間そのもの（「6/10 15:57 〜 6/11 15:57」のような期間表記）は本文に
+  含めない。期間はスレッド親のヘッドライン側に表示される。
 - 対象期間内に該当記事が無い場合は、新着がない旨を1文で簡潔に伝える。
 
 # Slack mrkdwn 記法（重要）
@@ -59,10 +61,13 @@ HEADLINE_SYSTEM_PROMPT = """\
 その全文があなたへの入力として与えられます。
 
 # ヘッドラインの書き方
-- スレッド全体の導入文として、2〜3文・簡潔にまとめる。
+- 冒頭1行目に対象期間を必ず明記する。受け取る期間はUTCなので+9時間して
+  「対象期間: MM/DD HH:MM 〜 MM/DD HH:MM JST」のように書く。
+- 続けて、スレッド全体の導入文として、2〜3文・簡潔にまとめる。
 - 特に注目すべき記事を1〜2個だけ取り上げ、何が起きたかを一言で伝える。
 - リンクは張らない（URLや `<url|text>` 形式を含めない）。
-- すべてのフィードで新着が無い場合は、本日は新着がない旨を1文で伝える。
+- すべてのフィードで新着が無い場合は、新着がない旨を1文で伝える。
+  その場合も対象期間の行は必ず表示する。
 
 # 出力スタイル（読者向け・重要）
 - 不特定多数のSlack読者がそのまま読む前提で、自然で分かりやすい日本語にする。
@@ -164,11 +169,15 @@ def run_digest(url: str, since: datetime, until: datetime) -> str:
     return output
 
 
-def run_headline(digests: list[tuple[str, str]]) -> str:
+def run_headline(
+    digests: list[tuple[str, str]], since: datetime, until: datetime
+) -> str:
     """Generate the thread-parent headline from the completed digest bodies.
 
     Args:
         digests: (name, body) pairs of every digest posted into the thread.
+        since: Digest window start (shown as JST in the headline).
+        until: Digest window end (shown as JST in the headline).
     """
     model = BedrockModel(
         model_id=config.BEDROCK_MODEL_ID,
@@ -179,8 +188,11 @@ def run_headline(digests: list[tuple[str, str]]) -> str:
         tools=[],
         system_prompt=HEADLINE_SYSTEM_PROMPT,
     )
+    since_iso = since.strftime("%Y-%m-%dT%H:%M:%SZ")
+    until_iso = until.strftime("%Y-%m-%dT%H:%M:%SZ")
     sections = "\n\n".join(f"## {name}\n{body}" for name, body in digests)
     prompt = (
+        f"対象期間: {since_iso} から {until_iso} まで（UTC）\n\n"
         f"以下は本日スレッドに投稿される各フィードのダイジェスト全文です。"
         f"これらを踏まえてヘッドラインを作成してください:\n\n{sections}"
     )

@@ -81,14 +81,17 @@ def test_handler_posts_summary_headline_then_threaded_reply(integrated_aws_mock)
     # run_digest is called per item with the single URL and period
     mock_run.assert_called_once_with(url, since=expected_since, until=expected_until)
 
-    # The headline is generated from every completed digest body
-    mock_headline.assert_called_once_with([("AWS News Blog", "digest body")])
+    # The headline is generated from every completed digest body and the window
+    mock_headline.assert_called_once_with(
+        [("AWS News Blog", "digest body")], since=expected_since, until=expected_until
+    )
 
-    # First post is the thread parent: generated summary + dated header
+    # First post is the thread parent: generated summary + date-less header
+    # (the digest window is shown in the headline body instead)
     headline = mock_post.call_args_list[0]
     assert headline.kwargs.get("thread_ts") is None
     assert headline.kwargs["text"] == "headline summary"
-    assert headline.kwargs["header"].startswith("Tech Digest - ")
+    assert headline.kwargs["header"] == "Tech Digest"
 
     # Second post is the reply into the thread returned by the headline post
     reply = mock_post.call_args_list[1]
@@ -181,7 +184,10 @@ def test_handler_excludes_failed_digest_from_headline_and_replies(
     assert result["results"]["https://example.com/ok"] == "success"
     assert "error" in result["results"]["https://example.com/bad"]
     # The failed item is excluded from the headline input and gets no reply
-    mock_headline.assert_called_once_with([("OK", "digest")])
+    until = datetime.fromisoformat("2026-06-01T00:00:00Z")
+    mock_headline.assert_called_once_with(
+        [("OK", "digest")], since=until - timedelta(hours=24), until=until
+    )
     assert mock_post.call_count == 2  # headline + 1 reply
 
 
@@ -200,7 +206,7 @@ def test_handler_falls_back_to_empty_headline_on_generation_error(
     # The thread is still posted, with a header-only parent message
     headline = mock_post.call_args_list[0]
     assert headline.kwargs["text"] == ""
-    assert headline.kwargs["header"].startswith("Tech Digest - ")
+    assert headline.kwargs["header"] == "Tech Digest"
     assert result["results"]["https://aws.amazon.com/blogs/aws/feed/"] == "success"
 
 

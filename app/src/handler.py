@@ -4,7 +4,6 @@ from typing import Any
 
 from src import slack_notifier
 from src.agent import run_digest, run_headline, run_plan
-from src.config import JST
 from src.logging_config import configure_logging
 from src.store import SourceItem, get_all_sources
 
@@ -32,7 +31,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return {"status": "ok", "sources": 0}
 
     until = _parse_scheduled_time(event)
-    today = datetime.now(JST).strftime("%Y年%m月%d日")
 
     results: dict[str, str] = {}
 
@@ -40,7 +38,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         title = source["title"]
         channel = source["channel_id"]
         items = source["items"]
-        header = f"{title} - {today}"
+        # No date in the header: the headline body always carries the digest
+        # window, which would make a date here redundant.
+        header = title
 
         # The plan agent interprets the free-text schedule and derives `since`
         # from the bot's last post in the channel (24h ago when unavailable).
@@ -76,7 +76,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 results[url] = f"error: {e}"
 
         try:
-            headline_body = run_headline([(it["name"], body) for it, body in digests])
+            headline_body = run_headline(
+                [(it["name"], body) for it, body in digests], since=since, until=until
+            )
         except Exception as e:
             logger.error(
                 "Headline generation failed for %s: %s", title, e, exc_info=True
