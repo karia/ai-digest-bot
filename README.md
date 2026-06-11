@@ -10,15 +10,20 @@ EventBridge Schedule (cron: 毎日 JST 9:00)
   ▼
 Lambda (Python 3.14 / uv)
   ├─ DynamoDB: sources テーブル → 購読ソース一覧を取得
-  │   （1 ソース = title + channel_id + items[{url, name}]）
+  │   （1 ソース = title + channel_id + items[{url, name}] + posting_schedule）
   └─ ソースごとに以下を実行（1 ソース = 1 スレッド）:
+      ├─ プランエージェントが投稿可否と対象期間を決定:
+      │   ├─ posting_schedule（「毎日」「月曜と木曜」などの自由テキスト）を
+      │   │   解釈し、本日が投稿対象日でなければスキップ
+      │   └─ slack_last_bot_post ツールでチャンネル内の bot 前回投稿時刻
+      │       （最大2週間遡る）を取得して期間の起点に。見つからなければ過去24時間
       ├─ items の URL ごとにダイジェストを生成（投稿はまだしない）:
       │   ├─ Strands Agents SDK でエージェントを起動
       │   │   エージェントは以下のツールを自律的に選択して記事を取得:
       │   │   ├─ rss_fetch: RSSフィードの取得・パース
       │   │   ├─ web_scrape: RSS非対応ソースのWebページ取得
       │   │   └─ api_fetch: API経由の取得
-      │   └─ 過去24時間以内の記事を日本語ダイジェストに要約
+      │   └─ 対象期間内の記事を日本語ダイジェストに要約
       ├─ 全ダイジェスト本文からヘッドライン文を生成（注目記事1〜2件に言及、リンクなし）
       ├─ ヘッドライン（title + 日付 + ヘッドライン文）を投稿し ts を取得
       └─ ダイジェストごとに Slack API (chat.postMessage, thread_ts) でスレッド返信
@@ -39,7 +44,13 @@ uv run pre-commit install
 2. **OAuth & Permissions** → **Bot Token Scopes** に以下を追加:
    - `chat:write`: メッセージ投稿（スレッド返信もこのスコープで可能）
    - `chat:write.public`: チャンネル未参加でも投稿する場合（任意）
+   - `channels:history`: bot の前回投稿時刻の取得（パブリックチャンネルの履歴読み取り）
+   - `groups:history`: プライベートチャンネルへ投稿する場合の履歴読み取り（任意）
 3. **Install App to Workspace** でワークスペースにインストール
+
+> 履歴の読み取りには bot が対象チャンネルに**参加している**必要があります（`/invite @bot名`）。
+> 未参加の場合、前回投稿時刻の取得に失敗し、対象期間は過去24時間にフォールバックします。
+> スコープを後から追加した場合はアプリの再インストールが必要で、トークンが変わった場合は SSM パラメータも更新してください。
 4. **Bot User OAuth Token**（`xoxb-...`）をコピーし、SSM Parameter Store に登録:
 
 ```bash
@@ -125,7 +136,7 @@ aws logs tail "/aws/lambda/$(terraform -chdir=terraform output -raw lambda_funct
 
 ## ソース管理
 
-`sources` テーブルの一覧・追加・削除は Make ターゲットで行います（内部で `scripts/manage_sources.py` を実行）。1 ソースは `title`（スレッドのヘッドライン＝パーティションキー）、`channel_id`、`items`（`{url, name}` の配列）から成り、1 スレッドに対応します。
+`sources` テーブルの一覧・追加・削除は Make ターゲットで行います（内部で `scripts/manage_sources.py` を実行）。1 ソースは `title`（スレッドのヘッドライン＝パーティションキー）、`channel_id`、`items`（`{url, name}` の配列）、`posting_schedule`（投稿スケジュール）から成り、1 スレッドに対応します。
 
 ### 一覧表示
 
@@ -137,10 +148,13 @@ make sources-list
 
 ```bash
 make sources-add TITLE="技術ブログダイジェスト" CHANNEL_ID="CXXXXXXXXXX" \
-  ITEMS="https://example.com/feed/|Example Blog https://aws.amazon.com/blogs/aws/feed/|AWS News Blog"
+  ITEMS="https://example.com/feed/|Example Blog https://aws.amazon.com/blogs/aws/feed/|AWS News Blog" \
+  POSTING_SCHEDULE="月曜と木曜"
 ```
 
 `ITEMS` は `url|name` を空白区切りで複数指定します。同じ `TITLE` で再実行すると `items` ごと上書き更新されます（`inserted_at` は保持、`updated_at` のみ更新）。
+
+`POSTING_SCHEDULE` は「毎日」「月曜と木曜」「平日のみ」のような自由テキストで、投稿可否の判定はエージェントが解釈して行います。省略時は「毎日」です。**上書き更新時に省略すると「毎日」にリセットされる**点に注意してください。
 
 ### 削除
 
