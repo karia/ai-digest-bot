@@ -16,12 +16,20 @@ from src.store import SourceItem, add_source, delete_source, get_all_sources
 
 
 def _parse_item(raw: str) -> SourceItem:
-    url, _, name = raw.partition("|")
+    url, _, rest = raw.partition("|")
+    name, _, option = rest.partition("|")
     if not url or not name:
         raise argparse.ArgumentTypeError(
-            f'--item must be "url|name", got {raw!r}'
+            f'--item must be "url|name" or "url|name|daily", got {raw!r}'
         )
-    return {"url": url.strip(), "name": name.strip()}
+    item: SourceItem = {"url": url.strip(), "name": name.strip()}
+    if option:
+        if option.strip() != "daily":
+            raise argparse.ArgumentTypeError(
+                f'--item option must be "daily", got {option.strip()!r}'
+            )
+        item["split_by_day"] = True
+    return item
 
 
 def _parse_schedule(raw: str) -> str:
@@ -43,7 +51,8 @@ def cmd_list(args: argparse.Namespace) -> None:
             f"  [{schedule}]  {source['inserted_at']}"
         )
         for item in source["items"]:
-            print(f"    - {item['name']:<25} {item['url']}")
+            mark = "  [daily]" if item.get("split_by_day") else ""
+            print(f"    - {item['name']:<25} {item['url']}{mark}")
     print(f"\n{len(sources)} source(s).")
 
 
@@ -76,8 +85,9 @@ def main() -> None:
         required=True,
         action="append",
         type=_parse_item,
-        metavar="URL|NAME",
-        help='Feed item as "url|name" (repeatable)',
+        metavar="URL|NAME[|daily]",
+        help='Feed item as "url|name" (repeatable). Append "|daily" to post'
+        " one threaded reply per JST day instead of a single reply",
     )
     p_add.add_argument(
         "--posting-schedule",

@@ -1,5 +1,5 @@
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -137,6 +137,44 @@ def _mock_plan_result(plan):
     result = MagicMock()
     result.structured_output = plan
     return result
+
+
+def test_run_daily_digests_returns_days():
+    from src.agent import DailyDigest, DailyDigests, run_daily_digests
+
+    days = [
+        DailyDigest(date=date(2026, 5, 31), body="本文31"),
+        DailyDigest(date=date(2026, 6, 1), body="本文1"),
+    ]
+    with patch("src.agent.Agent") as MockAgent:
+        MockAgent.return_value.return_value = _mock_plan_result(DailyDigests(days=days))
+        result = run_daily_digests("https://example.com/feed", since=SINCE, until=UNTIL)
+
+    assert result == days
+
+
+def test_run_daily_digests_passes_url_period_and_output_model():
+    from src.agent import DailyDigests, run_daily_digests
+
+    with patch("src.agent.Agent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.return_value = _mock_plan_result(DailyDigests(days=[]))
+        run_daily_digests("https://example.com/feed", since=SINCE, until=UNTIL)
+
+        prompt = instance.call_args[0][0]
+        assert "https://example.com/feed" in prompt
+        assert "2026-05-31T00:00:00Z" in prompt
+        assert "2026-06-01T00:00:00Z" in prompt
+        assert instance.call_args.kwargs["structured_output_model"] is DailyDigests
+
+
+def test_run_daily_digests_raises_without_structured_output():
+    from src.agent import run_daily_digests
+
+    with patch("src.agent.Agent") as MockAgent:
+        MockAgent.return_value.return_value = _mock_plan_result(None)
+        with pytest.raises(ValueError):
+            run_daily_digests("https://example.com/feed", since=SINCE, until=UNTIL)
 
 
 def test_run_plan_returns_structured_plan():

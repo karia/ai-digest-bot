@@ -3,9 +3,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from src import slack_notifier
-from src.agent import run_digest, run_headline, run_plan
+from src.agent import run_daily_digests, run_digest, run_headline, run_plan
 from src.logging_config import configure_logging
-from src.store import SourceItem, get_all_sources
+from src.store import get_all_sources
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
         # Generate every digest first: the headline must summarize the whole
         # thread, so nothing is posted until all bodies are ready.
-        digests: list[tuple[SourceItem, str]] = []
+        digests: list[tuple[str, str, str]] = []  # (url, reply header, body)
         for item in items:
             url = item["url"]
             name = item["name"]
@@ -69,15 +69,25 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 until.isoformat(),
             )
             try:
-                body = run_digest(url, since=since, until=until)
-                digests.append((item, body))
+                if item.get("split_by_day"):
+                    days = run_daily_digests(url, since=since, until=until)
+                    if not days:
+                        # Days without articles get no reply, so an empty
+                        # window posts nothing for this item.
+                        results[url] = "no articles"
+                        continue
+                    for day in days:
+                        digests.append((url, f"{name} ({day.date:%m/%d})", day.body))
+                else:
+                    body = run_digest(url, since=since, until=until)
+                    digests.append((url, name, body))
             except Exception as e:
                 logger.error("Failed for %s: %s", url, e, exc_info=True)
                 results[url] = f"error: {e}"
 
         try:
             headline_body = run_headline(
-                [(it["name"], body) for it, body in digests], since=since, until=until
+                [(h, body) for _, h, body in digests], since=since, until=until
             )
         except Exception as e:
             logger.error(
@@ -95,15 +105,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             results[title] = f"error: {e}"
             continue
 
-        for item, body in digests:
-            url = item["url"]
-            name = item["name"]
+        for url, reply_header, body in digests:
             try:
                 slack_notifier.post_message(
-                    channel, text=body, header=name, thread_ts=thread_ts
+                    channel, text=body, header=reply_header, thread_ts=thread_ts
                 )
                 results[url] = "success"
-                logger.info("Reply for %s done", name)
+                logger.info("Reply for %s done", reply_header)
             except Exception as e:
                 logger.error("Failed to post reply for %s: %s", url, e, exc_info=True)
                 results[url] = f"error: {e}"

@@ -64,7 +64,8 @@ sources-list:
 	cd app && PYTHONPATH=. SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
 	  uv run python ../scripts/manage_sources.py list
 
-# Usage: make sources-add TITLE="技術ダイジェスト" CHANNEL_ID="CXXXX" ITEMS="url1|name1 url2|name2" [POSTING_SCHEDULE="月曜と木曜"]
+# Usage: make sources-add TITLE="技術ダイジェスト" CHANNEL_ID="CXXXX" ITEMS="url1|name1 url2|name2|daily" [POSTING_SCHEDULE="月曜と木曜"]
+# Append "|daily" to an item to post one threaded reply per JST day.
 # Note: full upsert — omitting POSTING_SCHEDULE on re-add resets the schedule to 毎日.
 sources-add:
 	cd app && PYTHONPATH=. SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
