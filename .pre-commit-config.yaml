@@ -13,6 +13,8 @@ repos:
         additional_dependencies:
           - boto3-stubs[dynamodb,ssm,bedrock-runtime]
           - types-requests
+          - strands-agents
+          - pydantic
         files: ^app/src/
 
   - repo: https://github.com/antonbabenko/pre-commit-terraform
