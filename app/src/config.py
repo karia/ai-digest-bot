@@ -1,6 +1,10 @@
 import os
+from datetime import timedelta, timezone
 
 import boto3
+
+# JST has no DST, so a fixed +9 offset is correct and avoids a tzdata dependency.
+JST = timezone(timedelta(hours=9))
 
 _slack_token_cache: str | None = None
 
