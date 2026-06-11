@@ -24,21 +24,35 @@ def _parse_item(raw: str) -> SourceItem:
     return {"url": url.strip(), "name": name.strip()}
 
 
+def _parse_schedule(raw: str) -> str:
+    schedule = raw.strip()
+    if not schedule:
+        raise argparse.ArgumentTypeError("--posting-schedule must not be empty")
+    return schedule
+
+
 def cmd_list(args: argparse.Namespace) -> None:
     sources = get_all_sources()
     if not sources:
         print("No sources registered.")
         return
     for source in sources:
-        print(f"# {source['title']}  ({source['channel_id']})  {source['inserted_at']}")
+        schedule = source.get("posting_schedule", "毎日")
+        print(
+            f"# {source['title']}  ({source['channel_id']})"
+            f"  [{schedule}]  {source['inserted_at']}"
+        )
         for item in source["items"]:
             print(f"    - {item['name']:<25} {item['url']}")
     print(f"\n{len(sources)} source(s).")
 
 
 def cmd_add(args: argparse.Namespace) -> None:
-    add_source(args.title, args.channel_id, args.item)
-    print(f"Added/updated: {args.title} -> {args.channel_id} ({len(args.item)} item(s))")
+    add_source(args.title, args.channel_id, args.item, args.posting_schedule)
+    print(
+        f"Added/updated: {args.title} -> {args.channel_id}"
+        f" ({len(args.item)} item(s), schedule: {args.posting_schedule})"
+    )
 
 
 def cmd_delete(args: argparse.Namespace) -> None:
@@ -64,6 +78,12 @@ def main() -> None:
         type=_parse_item,
         metavar="URL|NAME",
         help='Feed item as "url|name" (repeatable)',
+    )
+    p_add.add_argument(
+        "--posting-schedule",
+        type=_parse_schedule,
+        default="毎日",
+        help='Free-text posting schedule interpreted by the agent, e.g. "毎日", "月曜と木曜" (default: 毎日)',
     )
     p_add.set_defaults(func=cmd_add)
 
