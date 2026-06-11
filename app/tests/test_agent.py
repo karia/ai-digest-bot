@@ -147,9 +147,7 @@ def test_run_daily_digests_returns_days():
         DailyDigest(date=date(2026, 6, 1), body="本文1"),
     ]
     with patch("src.agent.Agent") as MockAgent:
-        MockAgent.return_value.return_value = _mock_plan_result(
-            DailyDigests(days=days)
-        )
+        MockAgent.return_value.return_value = _mock_plan_result(DailyDigests(days=days))
         result = run_daily_digests("https://example.com/feed", since=SINCE, until=UNTIL)
 
     assert result == days
