@@ -17,7 +17,7 @@ make deploy-infra          # terraform apply（先に実行する必要がある
 make deploy-app            # build → lambroll deploy
 make deploy                # deploy-infra + deploy-app
 make invoke                # 現在時刻を scheduled_time として本番 Lambda を手動 invoke
-make sources-list / sources-add TITLE=.. CHANNEL_ID=.. ITEMS="url|name[|daily] .." [POSTING_SCHEDULE=..] / sources-delete TITLE=..
+make sources-list / sources-add TITLE=.. CHANNEL_ID=.. ITEMS="url|name[|daily]; .." [POSTING_SCHEDULE=..] / sources-delete TITLE=..
 make migrate               # 旧 feeds テーブル → sources テーブルのデータ移行（冪等。移行済みなら no-op）
 ```
 

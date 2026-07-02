@@ -70,7 +70,7 @@ make deploy-infra
 
 # 2. Slack Bot Token を SSM に登録（上記手順参照）
 
-# 3. 配信するソースを DynamoDB に登録（ITEMS は "url|name" を空白区切りで複数指定可）
+# 3. 配信するソースを DynamoDB に登録（ITEMS は "url|name" を ";" 区切りで複数指定可）
 make sources-add TITLE="技術ブログダイジェスト" CHANNEL_ID="CXXXXXXXXXX" \
   ITEMS="https://aws.amazon.com/blogs/aws/feed/|AWS News Blog"
 
@@ -149,11 +149,11 @@ make sources-list
 
 ```bash
 make sources-add TITLE="技術ブログダイジェスト" CHANNEL_ID="CXXXXXXXXXX" \
-  ITEMS="https://example.com/feed/|Example Blog https://aws.amazon.com/blogs/aws/feed/|AWS News Blog" \
+  ITEMS="https://example.com/feed/|Example Blog; https://aws.amazon.com/blogs/aws/feed/|AWS News Blog" \
   POSTING_SCHEDULE="月曜と木曜"
 ```
 
-`ITEMS` は `url|name` を空白区切りで複数指定します。同じ `TITLE` で再実行すると `items` ごと上書き更新されます（`inserted_at` は保持、`updated_at` のみ更新）。
+`ITEMS` は `url|name` を `;` 区切りで複数指定します（`name` に空白を含められます）。同じ `TITLE` で再実行すると `items` ごと上書き更新されます（`inserted_at` は保持、`updated_at` のみ更新）。
 
 `url|name|daily` のように `|daily` を付けたitemは、1返信にまとめる代わりに **JST日付ごとに1スレッド返信**へ分割されます（記事が無かった日は投稿されず、期間内に1件も無ければ返信自体を行いません）。AWS What's New のような発表件数の多いフィード向けです。
 
