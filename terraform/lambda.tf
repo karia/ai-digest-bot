@@ -119,6 +119,7 @@ resource "aws_lambda_function" "main" {
       layers,
       runtime,
       handler,
+      description,
       timeout,
       memory_size,
       environment,

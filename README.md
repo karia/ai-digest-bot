@@ -64,17 +64,22 @@ aws ssm put-parameter \
 
 ## デプロイ
 
+Terraform state は S3 backend（S3 ネイティブロック）で管理します。state 保存先のバケットは事前に用意し（バージョニング有効推奨）、バケット名は git 管理外の `terraform/backend.tfbackend` から注入します。
+
 ```bash
-# 1. インフラ構築
+# 1. Terraform backend の設定（初回のみ。git 管理外の terraform/backend.tfbackend を生成）
+make config TFSTATE_BUCKET=<your-tfstate-bucket>
+
+# 2. インフラ構築
 make deploy-infra
 
-# 2. Slack Bot Token を SSM に登録（上記手順参照）
+# 3. Slack Bot Token を SSM に登録（上記手順参照）
 
-# 3. 配信するソースを DynamoDB に登録（ITEMS は "url|name" を ";" 区切りで複数指定可）
+# 4. 配信するソースを DynamoDB に登録（ITEMS は "url|name" を ";" 区切りで複数指定可）
 make sources-add TITLE="技術ブログダイジェスト" CHANNEL_ID="CXXXXXXXXXX" \
   ITEMS="https://aws.amazon.com/blogs/aws/feed/|AWS News Blog"
 
-# 4. Lambda にソースコードをデプロイ
+# 5. Lambda にソースコードをデプロイ
 make deploy-app
 ```
 
