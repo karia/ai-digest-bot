@@ -32,6 +32,13 @@ def _parse_item(raw: str) -> SourceItem:
     return item
 
 
+def _parse_items(raw: str) -> list[SourceItem]:
+    items = [_parse_item(part.strip()) for part in raw.split(";") if part.strip()]
+    if not items:
+        raise argparse.ArgumentTypeError(f"--item must not be empty, got {raw!r}")
+    return items
+
+
 def _parse_schedule(raw: str) -> str:
     schedule = raw.strip()
     if not schedule:
@@ -83,11 +90,12 @@ def main() -> None:
     p_add.add_argument(
         "--item",
         required=True,
-        action="append",
-        type=_parse_item,
-        metavar="URL|NAME[|daily]",
-        help='Feed item as "url|name" (repeatable). Append "|daily" to post'
-        " one threaded reply per JST day instead of a single reply",
+        action="extend",
+        type=_parse_items,
+        metavar='"URL|NAME[|daily][; URL|NAME[|daily] ...]"',
+        help='Feed items as "url|name", separated by ";" (also repeatable).'
+        ' Append "|daily" to post one threaded reply per JST day instead of'
+        " a single reply",
     )
     p_add.add_argument(
         "--posting-schedule",
