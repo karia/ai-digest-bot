@@ -17,4 +17,5 @@ dist/
 terraform/dummy.zip
 
 # Other
+.superpowers/
 function.zip
