@@ -459,3 +459,51 @@ def test_parse_scheduled_time_invalid_falls_back_to_now():
     dt = _parse_scheduled_time({"scheduled_time": "<aws.scheduler.scheduled-time>"})
     after = datetime.now(UTC)
     assert before <= dt <= after
+
+
+def test_handler_dispatches_to_the_advisor_job(integrated_aws_mock):
+    from src.handler import lambda_handler
+
+    with (
+        patch(
+            "src.handler.run_advisor_job", return_value={"status": "ok", "advisors": 1}
+        ) as mock_advisor,
+        patch("src.handler.run_digest_job") as mock_digest,
+    ):
+        result = lambda_handler(
+            {"job": "advisor", "scheduled_time": "2026-07-24T08:00:00Z"}, None
+        )
+
+    assert result == {"status": "ok", "advisors": 1}
+    mock_digest.assert_not_called()
+    mock_advisor.assert_called_once_with(datetime.fromisoformat("2026-07-24T08:00:00Z"))
+
+
+def test_handler_defaults_to_the_digest_job(integrated_aws_mock):
+    from src.handler import lambda_handler
+
+    with (
+        patch("src.handler.run_advisor_job") as mock_advisor,
+        patch(
+            "src.handler.run_digest_job", return_value={"status": "ok", "sources": 0}
+        ) as mock_digest,
+    ):
+        lambda_handler({"scheduled_time": "2026-06-01T00:00:00Z"}, None)
+
+    mock_advisor.assert_not_called()
+    mock_digest.assert_called_once()
+
+
+def test_handler_treats_an_unknown_job_as_digest(integrated_aws_mock):
+    from src.handler import lambda_handler
+
+    with (
+        patch("src.handler.run_advisor_job") as mock_advisor,
+        patch(
+            "src.handler.run_digest_job", return_value={"status": "ok", "sources": 0}
+        ) as mock_digest,
+    ):
+        lambda_handler({"job": "nonsense"}, None)
+
+    mock_advisor.assert_not_called()
+    mock_digest.assert_called_once()
