@@ -9,7 +9,14 @@ local env = std.native('env');
   MemorySize: 512,
   Role: must_env('LAMBDA_ROLE_ARN'),
   Runtime: 'python3.14',
-  Timeout: 300,
+  // 900 = Lambda max. The advisor job needs the headroom: N sequential NAV
+  // fetches plus an agent loop that can run 8-20 turns (FX lookups, news
+  // feed crawl, per-product nav_fetch, per-product reason). A shorter
+  // timeout can hard-kill mid-thread, leaving a parent post with no product
+  // replies and no put_judgments, which should_post then treats as "already
+  // posted today" until interval_days elapses. Costs nothing when unused;
+  // the digest job finishes well under this.
+  Timeout: 900,
   TracingConfig: {
     Mode: 'Active',
   },
