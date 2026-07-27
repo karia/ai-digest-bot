@@ -183,7 +183,18 @@ def run_advisor_job(now: datetime) -> dict[str, Any]:
 
     results: dict[str, str] = {}
     for advisor in advisors:
-        results[advisor["advisor_id"]] = _process_advisor(advisor, now)
+        advisor_id = advisor["advisor_id"]
+        # Outer safety net: one advisor's uncaught exception (e.g. DynamoDB
+        # throttling in get_judgment_history/put_judgments, which are not
+        # individually guarded like the Slack/agent calls above) must not
+        # abort the remaining advisors in this run.
+        try:
+            results[advisor_id] = _process_advisor(advisor, now)
+        except Exception as e:
+            logger.error(
+                "Unhandled error processing %s: %s", advisor_id, e, exc_info=True
+            )
+            results[advisor_id] = f"error: {e}"
 
     logger.info("Advisor run complete: %s", results)
     return {"status": "ok", "advisors": len(advisors), "results": results}

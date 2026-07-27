@@ -216,3 +216,50 @@ def test_returns_ok_with_no_advisors(integrated_aws_mock):
     result = run_advisor_job(NOW)
 
     assert result == {"status": "ok", "advisors": 0}
+
+
+def test_continues_to_the_next_advisor_when_one_raises_unexpectedly(
+    integrated_aws_mock,
+):
+    """An uncaught exception from one advisor (e.g. put_judgments throttled
+    after its Slack thread already posted) must not abort the whole run —
+    the loop in run_advisor_job must still process the remaining advisors.
+    """
+    from src.advisor import run_advisor_job
+    from src.advisor_store import add_advisor
+
+    add_advisor(
+        "ideco-rakuten",
+        "CADVISOR02",
+        "iDeCo 投資判断(楽天)",
+        [
+            {
+                "isin": "JP90C000ABC1",
+                "name": "楽天・全世界株式インデックス・ファンド",
+                "category": "全世界株",
+                "holding": True,
+                "assoc_fund_cd": "0331419A",
+            }
+        ],
+        [{"url": "https://example.com/market2.rss", "name": "市況ニュース2"}],
+        "スイッチングは即日。",
+    )
+
+    def fail_for_sbi(advisor_id: str, run_date: str, judgments: list[object]) -> None:
+        if advisor_id == "ideco-sbi":
+            raise RuntimeError("throttled")
+
+    with (
+        patch("src.advisor.find_last_post_time", return_value=None),
+        patch("src.advisor.fetch_nav_series", return_value=SERIES),
+        patch("src.advisor.run_advice", return_value=_advice()),
+        patch("src.advisor.slack_notifier.post_message", return_value="t"),
+        patch("src.advisor.put_judgments", side_effect=fail_for_sbi) as mock_put,
+    ):
+        result = run_advisor_job(NOW)
+
+    assert result["advisors"] == 2
+    assert "error" in result["results"]["ideco-sbi"]
+    # The advisor after the one that raised is still processed and succeeds.
+    assert result["results"]["ideco-rakuten"] == "success"
+    assert mock_put.call_count == 2
