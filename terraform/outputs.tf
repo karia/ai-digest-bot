@@ -17,3 +17,13 @@ output "slack_token_param_name" {
   description = "SSM parameter name for Slack Bot Token"
   value       = aws_ssm_parameter.slack_token.name
 }
+
+output "advisors_table_name" {
+  description = "DynamoDB advisors table name"
+  value       = aws_dynamodb_table.advisors.name
+}
+
+output "judgments_table_name" {
+  description = "DynamoDB advisor judgments table name"
+  value       = aws_dynamodb_table.advisor_judgments.name
+}
