@@ -89,6 +89,32 @@ def test_fetch_nav_series_keeps_only_the_last_n_points():
 
 
 @responses.activate
+def test_fetch_nav_series_clamps_zero_days_to_one_point():
+    from src.nav import NAV_CSV_URL, fetch_nav_series
+
+    responses.add(
+        responses.GET, NAV_CSV_URL, body=SAMPLE_CSV.encode("cp932"), status=200
+    )
+
+    points = fetch_nav_series("JP90C000H1T1", "0331418A", days=0)
+
+    assert [p.date for p in points] == [date(2026, 7, 24)]
+
+
+@responses.activate
+def test_fetch_nav_series_clamps_negative_days_to_one_point():
+    from src.nav import NAV_CSV_URL, fetch_nav_series
+
+    responses.add(
+        responses.GET, NAV_CSV_URL, body=SAMPLE_CSV.encode("cp932"), status=200
+    )
+
+    points = fetch_nav_series("JP90C000H1T1", "0331418A", days=-5)
+
+    assert [p.date for p in points] == [date(2026, 7, 24)]
+
+
+@responses.activate
 def test_fetch_nav_series_raises_on_http_error():
     from src.nav import NAV_CSV_URL, fetch_nav_series
 

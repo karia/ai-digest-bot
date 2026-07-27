@@ -73,4 +73,8 @@ def fetch_nav_series(isin: str, assoc_fund_cd: str, days: int = 180) -> list[Nav
     )
     response.raise_for_status()
     points = parse_nav_csv(response.content)
-    return points[-days:]
+    # days is exposed to the agent as a tool parameter with no minimum, so it
+    # can arrive as 0 (points[-0:] would return the *entire* series) or
+    # negative (which would silently return the oldest rows instead of the
+    # newest). Clamp to at least 1 trailing row.
+    return points[-max(days, 1) :]
