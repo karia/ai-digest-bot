@@ -1,4 +1,4 @@
-.PHONY: setup config test lint lint-app lint-tf build clean deploy-infra deploy-app deploy deploy-infra-dry deploy-app-dry deploy-dry sources-list sources-add sources-delete migrate update-actions invoke
+.PHONY: setup config test lint lint-app lint-tf build clean deploy-infra deploy-app deploy deploy-infra-dry deploy-app-dry deploy-dry sources-list sources-add sources-delete migrate update-actions invoke advisors-list advisors-add advisors-delete invoke-advisor
 
 export PATH := $(HOME)/.local/share/mise/shims:$(PATH)
 
@@ -51,6 +51,8 @@ deploy-app: build
 	  LAMBDA_FUNCTION_NAME="$$(terraform -chdir=../terraform output -raw lambda_function_name)" \
 	  LAMBDA_ROLE_ARN="$$(terraform -chdir=../terraform output -raw lambda_role_arn)" \
 	  SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
+	  ADVISORS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw advisors_table_name)" \
+	  JUDGMENTS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw judgments_table_name)" \
 	  SLACK_BOT_TOKEN_PARAM="$$(terraform -chdir=../terraform output -raw slack_token_param_name)" \
 	  lambroll deploy --function function.jsonnet --src ../.build
 
@@ -59,6 +61,8 @@ deploy-app-dry: build
 	  LAMBDA_FUNCTION_NAME="$$(terraform -chdir=../terraform output -raw lambda_function_name)" \
 	  LAMBDA_ROLE_ARN="$$(terraform -chdir=../terraform output -raw lambda_role_arn)" \
 	  SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
+	  ADVISORS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw advisors_table_name)" \
+	  JUDGMENTS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw judgments_table_name)" \
 	  SLACK_BOT_TOKEN_PARAM="$$(terraform -chdir=../terraform output -raw slack_token_param_name)" \
 	  lambroll diff --function function.jsonnet --src ../.build
 
@@ -68,6 +72,8 @@ deploy-dry: deploy-infra-dry deploy-app-dry
 
 sources-list:
 	cd app && PYTHONPATH=. SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
+	  ADVISORS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw advisors_table_name)" \
+	  JUDGMENTS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw judgments_table_name)" \
 	  uv run python ../scripts/manage_sources.py list
 
 # Usage: make sources-add TITLE="技術ダイジェスト" CHANNEL_ID="CXXXX" ITEMS="url1|name 1; url2|name 2|daily" [POSTING_SCHEDULE="月曜と木曜"]
@@ -75,15 +81,48 @@ sources-list:
 # Note: full upsert — omitting POSTING_SCHEDULE on re-add resets the schedule to 毎日.
 sources-add:
 	cd app && PYTHONPATH=. SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
+	  ADVISORS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw advisors_table_name)" \
+	  JUDGMENTS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw judgments_table_name)" \
 	  uv run python ../scripts/manage_sources.py add --title "$(TITLE)" --channel-id "$(CHANNEL_ID)" --item "$(ITEMS)" $(if $(POSTING_SCHEDULE),--posting-schedule "$(POSTING_SCHEDULE)")
 
 sources-delete:
 	cd app && PYTHONPATH=. SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
+	  ADVISORS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw advisors_table_name)" \
+	  JUDGMENTS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw judgments_table_name)" \
 	  uv run python ../scripts/manage_sources.py delete --title "$(TITLE)"
+
+advisors-list:
+	cd app && PYTHONPATH=. \
+	  ADVISORS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw advisors_table_name)" \
+	  JUDGMENTS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw judgments_table_name)" \
+	  SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
+	  uv run python ../scripts/manage_advisors.py list
+
+# Usage: make advisors-add ADVISOR_ID=ideco-sbi CHANNEL_ID=CXXXX TITLE="iDeCo 投資判断" \
+#          PRODUCTS='[{"isin":"JP90C000H1T1","name":"eMAXIS Slim 全世界株式(オール・カントリー)","category":"全世界株","holding":true,"assoc_fund_cd":"0331418A"}]' \
+#          NEWS_FEEDS='[{"url":"https://example.com/rss","name":"市況ニュース"}]' \
+#          TRADING_NOTES="スイッチングは指示から完了まで概ね1週間から10日。掛金の配分変更は翌月拠出分から反映。" \
+#          [INTERVAL_DAYS=7]
+# Note: full upsert — omitting a field on re-add clears it.
+advisors-add:
+	cd app && PYTHONPATH=. \
+	  ADVISORS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw advisors_table_name)" \
+	  JUDGMENTS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw judgments_table_name)" \
+	  SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
+	  uv run python ../scripts/manage_advisors.py add --advisor-id "$(ADVISOR_ID)" --channel-id "$(CHANNEL_ID)" --title "$(TITLE)" --products-json '$(PRODUCTS)' --news-feeds-json '$(NEWS_FEEDS)' --trading-notes "$(TRADING_NOTES)" $(if $(INTERVAL_DAYS),--interval-days "$(INTERVAL_DAYS)")
+
+advisors-delete:
+	cd app && PYTHONPATH=. \
+	  ADVISORS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw advisors_table_name)" \
+	  JUDGMENTS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw judgments_table_name)" \
+	  SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
+	  uv run python ../scripts/manage_advisors.py delete --advisor-id "$(ADVISOR_ID)"
 
 # One-off feeds -> sources data migration (idempotent). Optional: TITLE=...
 migrate:
 	cd app && PYTHONPATH=. SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
+	  ADVISORS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw advisors_table_name)" \
+	  JUDGMENTS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw judgments_table_name)" \
 	  MIGRATE_TITLE="$(TITLE)" \
 	  uv run python -m src.migrate
 
@@ -96,5 +135,14 @@ invoke:
 	  --invocation-type Event \
 	  --cli-binary-format raw-in-base64-out \
 	  --payload "$$(python3 -c "from datetime import UTC,datetime; print('{\"scheduled_time\":\"' + datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ') + '\"}')")" \
+	  /dev/stdout
+	@echo "Invoked asynchronously (StatusCode 202 = accepted). Check results in CloudWatch Logs / Slack."
+
+invoke-advisor:
+	aws lambda invoke \
+	  --function-name "$$(terraform -chdir=terraform output -raw lambda_function_name)" \
+	  --invocation-type Event \
+	  --cli-binary-format raw-in-base64-out \
+	  --payload "$$(python3 -c "from datetime import UTC,datetime; print('{\"job\":\"advisor\",\"scheduled_time\":\"' + datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ') + '\"}')")" \
 	  /dev/stdout
 	@echo "Invoked asynchronously (StatusCode 202 = accepted). Check results in CloudWatch Logs / Slack."
