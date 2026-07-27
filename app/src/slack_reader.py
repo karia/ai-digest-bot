@@ -22,8 +22,13 @@ def _get_bot_user_id(client: WebClient) -> str:
 def _has_header(message: dict[str, Any], header: str) -> bool:
     """Whether this message is the thread parent carrying ``header``.
 
-    post_message renders the header both as a header block (truncated to
-    HEADER_LIMIT) and as the fallback ``text`` field, so either can match.
+    post_message truncates the header to HEADER_LIMIT only in the header
+    block; the top-level ``text`` field carries the full, untruncated
+    header whenever one is set. So the block branch below is what actually
+    matches our own messages (a header block is always present when
+    ``header`` is set, and its comparison is truncated-to-truncated on both
+    sides). The ``text`` fallback only matters for messages without a
+    header block, where ``text`` holds the raw body instead.
     """
     truncated = header[:HEADER_LIMIT]
     for block in message.get("blocks") or []:
