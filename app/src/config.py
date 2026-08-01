@@ -22,6 +22,8 @@ def get_slack_token() -> str:
 
 
 SOURCES_TABLE_NAME: str = os.environ["SOURCES_TABLE_NAME"]
+ADVISORS_TABLE_NAME: str = os.environ["ADVISORS_TABLE_NAME"]
+JUDGMENTS_TABLE_NAME: str = os.environ["JUDGMENTS_TABLE_NAME"]
 BEDROCK_MODEL_ID: str = os.environ.get(
     "BEDROCK_MODEL_ID", "jp.anthropic.claude-sonnet-4-6"
 )

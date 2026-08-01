@@ -23,3 +23,39 @@ resource "aws_dynamodb_table" "sources" {
     enabled = true
   }
 }
+
+resource "aws_dynamodb_table" "advisors" {
+  name         = "${var.project_name}-advisors"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "advisor_id"
+
+  attribute {
+    name = "advisor_id"
+    type = "S"
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+}
+
+resource "aws_dynamodb_table" "advisor_judgments" {
+  name         = "${var.project_name}-advisor-judgments"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "advisor_id"
+  range_key    = "run_date"
+
+  attribute {
+    name = "advisor_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "run_date"
+    type = "S"
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+}

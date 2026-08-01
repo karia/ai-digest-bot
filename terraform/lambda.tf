@@ -37,9 +37,16 @@ resource "aws_iam_policy" "lambda_dynamodb" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
+      Effect = "Allow"
+      Action = ["dynamodb:Scan", "dynamodb:GetItem"]
+      Resource = [
+        aws_dynamodb_table.sources.arn,
+        aws_dynamodb_table.advisors.arn,
+      ]
+      }, {
       Effect   = "Allow"
-      Action   = ["dynamodb:Scan", "dynamodb:GetItem"]
-      Resource = aws_dynamodb_table.sources.arn
+      Action   = ["dynamodb:Query", "dynamodb:PutItem"]
+      Resource = aws_dynamodb_table.advisor_judgments.arn
     }]
   })
 }

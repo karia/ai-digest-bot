@@ -1,12 +1,15 @@
 import logging
 from datetime import UTC, date, datetime
+from typing import Literal
 
 from pydantic import BaseModel
 from strands import Agent
 from strands.models import BedrockModel
 
 from src import config
+from src.advisor_store import NewsFeed
 from src.tools.api_fetch import api_fetch
+from src.tools.nav_fetch import nav_fetch
 from src.tools.rss_fetch import rss_fetch
 from src.tools.slack_history import slack_last_bot_post
 from src.tools.web_scrape import web_scrape
@@ -44,6 +47,9 @@ SYSTEM_PROMPT = """\
 本文は Slack の mrkdwn で書く。通常の Markdown とは異なるので注意:
 - 強調・見出しは `*太字*`（アスタリスク1つ）を使う。
   `#` や `**` は使わない（そのまま文字として表示されてしまう）。
+  強調は行末で閉じるか、閉じる `*` の直後に半角スペースを置く。
+  `。` `、` `（` などの全角文字が直後に来る位置では強調を使わない。
+  Slack が太字と認識せず、アスタリスクがそのまま表示されてしまうため。
 - 箇条書きは行頭に `•` を使う。
 - リンクは `<https://example.com|表示名>` の形式にする。
   `[表示名](URL)` や裸のURLは使わない。
@@ -83,6 +89,9 @@ DAILY_SYSTEM_PROMPT = """\
 本文は Slack の mrkdwn で書く。通常の Markdown とは異なるので注意:
 - 強調・見出しは `*太字*`（アスタリスク1つ）を使う。
   `#` や `**` は使わない（そのまま文字として表示されてしまう）。
+  強調は行末で閉じるか、閉じる `*` の直後に半角スペースを置く。
+  `。` `、` `（` などの全角文字が直後に来る位置では強調を使わない。
+  Slack が太字と認識せず、アスタリスクがそのまま表示されてしまうため。
 - 箇条書きは行頭に `•` を使う。
 - リンクは `<https://example.com|表示名>` の形式にする。
   `[表示名](URL)` や裸のURLは使わない。
@@ -111,6 +120,9 @@ HEADLINE_SYSTEM_PROMPT = """\
 - 不特定多数のSlack読者がそのまま読む前提で、自然で分かりやすい日本語にする。
 - 取得処理や指示に関するメタな言及は一切含めない。
 - Slack mrkdwn で書く。強調は `*太字*`（アスタリスク1つ）。`#` や `**` は使わない。
+  強調は行末で閉じるか、閉じる `*` の直後に半角スペースを置く。
+  `。` `、` `（` などの全角文字が直後に来る位置では強調を使わない。
+  Slack が太字と認識せず、アスタリスクがそのまま表示されてしまうため。
 
 # 出力
 - 完成したヘッドライン本文のみを、あなたの最終メッセージとしてそのまま出力する。
@@ -136,6 +148,57 @@ PLAN_SYSTEM_PROMPT = """\
 - should_post: 本日投稿すべきかどうか。
 - since: 対象期間の開始時刻（UTC）。should_post=false の場合は null でよい。
 - reason: 判定理由を日本語1文で。
+"""
+
+ADVICE_SYSTEM_PROMPT = """\
+あなたは個人投資家向けの投資判断アドバイザーです。
+与えられた商品ごとに「買い」「売り」「ホールド」のいずれかを判定し、
+その理由と全体の市況サマリを日本語で作成してください。
+実際の売買は利用者本人が行います。あなたの役割は判断材料の提供です。
+
+# 判定の規則（重要）
+- 判定は BUY / SELL / HOLD の3値のいずれか。あいまいな表現で逃げない。
+  「やや強気」「中立寄り」のような中間表現は禁止。必ず3値のどれかに決める。
+- 与えられた商品すべてについて、漏れなく1つずつ判定を出す。
+  advices の isin は入力で与えられた ISIN をそのまま使う。
+
+# 売買特性の前提（重要）
+{trading_notes}
+
+上記の売買特性により、指示から約定までに時間がかかる。
+その期間内の値動きで無効になるような判断をしてはならない。
+日中や数日の値動きではなく、数週間以上のトレンドと構造的な材料に基づいて判断する。
+
+# 為替（重要）
+- api_fetch で USD/JPY の現在値と直近の推移を必ず取得する。
+  例: https://api.frankfurter.dev/v1/latest?base=USD&symbols=JPY
+  推移: https://api.frankfurter.dev/v1/<YYYY-MM-DD>..?base=USD&symbols=JPY
+- 為替ヘッジのない海外資産ファンド（全世界株式・先進国株式など）の判断では、
+  為替要因と現地資産要因を切り分けて理由を述べる。
+  円安による基準価額の上昇を、現地資産の上昇と混同しない。
+
+# 前回判断との比較
+- 入力には前回までの判断履歴が含まれる。
+- 前回から判定を変更する場合は、何が変わったのかを理由に必ず含める。
+- 変更しない場合も、なぜ維持するのかを一言添える。
+
+# 調査
+- nav_fetch: 商品の基準価額の推移。入力のサマリで足りなければ呼ぶ。
+- rss_fetch / web_scrape: 与えられた市況ニュースのフィードから相場材料を集める。
+- api_fetch: 為替やその他の数値データ。
+
+# 出力
+- summary: 今回の市況サマリ（Slack mrkdwn）。USD/JPY の現在値と変動見通しを必ず含め、
+  主要な相場材料と、判断を変更した商品があればその要点に触れる。3〜5文程度。
+- advices: 商品ごとの {{isin, judgment, reason}}。reason は2〜4文の日本語。
+- 本文は Slack の mrkdwn で書く。強調は `*太字*`（アスタリスク1つ）。
+  `#` や `**` は使わない。箇条書きは行頭に `•`。
+  リンクは `<https://example.com|表示名>` の形式にする。
+  強調は行末で閉じるか、閉じる `*` の直後に半角スペースを置く。
+  `。` `、` `（` などの全角文字が直後に来る位置では強調を使わない。
+  Slack が太字と認識せず、アスタリスクがそのまま表示されてしまうため。
+- 免責文は呼び出し側が付けるので、あなたは書かない。
+- ツールで Slack へ投稿してはいけない。
 """
 
 
@@ -285,3 +348,67 @@ def run_headline(
     output = str(result)
     logger.info("Bedrock output: %s", output)
     return output
+
+
+class ProductAdvice(BaseModel):
+    """The judgment for one product."""
+
+    isin: str
+    judgment: Literal["BUY", "SELL", "HOLD"]
+    reason: str
+
+
+class AdviceResult(BaseModel):
+    """One advisor run: the market summary plus a judgment per product."""
+
+    summary: str
+    advices: list[ProductAdvice]
+
+
+def run_advice(
+    context: str,
+    trading_notes: str,
+    news_feeds: list[NewsFeed],
+    now: datetime,
+) -> AdviceResult:
+    """Produce BUY/SELL/HOLD judgments for every product in ``context``.
+
+    Args:
+        context: Products, NAV summaries, past judgments and their scored
+            performance, prepared by the caller.
+        trading_notes: The scheme's trading characteristics (settlement lag
+            etc.), injected into the system prompt.
+        news_feeds: Market news sources the agent may crawl.
+        now: The run time; shown to the agent in both UTC and JST.
+
+    Raises:
+        ValueError: if the agent returns no structured output.
+    """
+    model = BedrockModel(
+        model_id=config.BEDROCK_MODEL_ID,
+        region_name=config.AWS_REGION,
+    )
+    agent = Agent(
+        model=model,
+        tools=[nav_fetch, rss_fetch, web_scrape, api_fetch],
+        system_prompt=ADVICE_SYSTEM_PROMPT.format(
+            trading_notes=trading_notes or "（特記なし）"
+        ),
+    )
+    now_utc = now.astimezone(UTC)
+    now_jst = now.astimezone(config.JST)
+    feeds = "\n".join(f"- {f['name']}: {f['url']}" for f in news_feeds) or "- （なし）"
+    prompt = (
+        f"現在日時: {now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}（UTC）"
+        f" = {now_jst.strftime('%Y-%m-%d %H:%M')} JST\n\n"
+        f"# 判断対象と直近の状況\n{context}\n\n"
+        f"# 市況ニュースの取得元\n{feeds}\n\n"
+        f"上記すべての商品について判定と理由、および市況サマリを作成してください。"
+    )
+    logger.info("Bedrock input: %s", prompt)
+    result = agent(prompt, structured_output_model=AdviceResult)
+    advice = result.structured_output
+    if not isinstance(advice, AdviceResult):
+        raise ValueError(f"advice agent returned no structured output: {result}")
+    logger.info("Bedrock output: %s", advice)
+    return advice

@@ -227,3 +227,120 @@ def test_run_plan_raises_without_structured_output():
         MockAgent.return_value.return_value = _mock_plan_result(None)
         with pytest.raises(ValueError):
             run_plan("C123", "毎日", UNTIL)
+
+
+def test_run_advice_returns_the_structured_output():
+    from unittest.mock import MagicMock, patch
+
+    from src.agent import AdviceResult, ProductAdvice, run_advice
+
+    expected = AdviceResult(
+        summary="USD/JPY は 163 円台。",
+        advices=[ProductAdvice(isin="JP90C000H1T1", judgment="HOLD", reason="様子見")],
+    )
+    result = MagicMock()
+    result.structured_output = expected
+
+    with (
+        patch("src.agent.BedrockModel"),
+        patch("src.agent.Agent") as mock_agent,
+    ):
+        mock_agent.return_value.return_value = result
+        advice = run_advice(
+            context="商品一覧...",
+            trading_notes="スイッチングは1週間から10日",
+            news_feeds=[{"url": "https://example.com/rss", "name": "市況"}],
+            now=datetime(2026, 7, 24, 8, 0, tzinfo=UTC),
+        )
+
+    assert advice is expected
+
+
+def test_run_advice_injects_trading_notes_into_the_system_prompt():
+    from unittest.mock import MagicMock, patch
+
+    from src.agent import AdviceResult, run_advice
+
+    result = MagicMock()
+    result.structured_output = AdviceResult(summary="s", advices=[])
+
+    with (
+        patch("src.agent.BedrockModel"),
+        patch("src.agent.Agent") as mock_agent,
+    ):
+        mock_agent.return_value.return_value = result
+        run_advice(
+            context="ctx",
+            trading_notes="配分変更は翌月拠出分から反映",
+            news_feeds=[],
+            now=datetime(2026, 7, 24, 8, 0, tzinfo=UTC),
+        )
+
+    system_prompt = mock_agent.call_args.kwargs["system_prompt"]
+    assert "配分変更は翌月拠出分から反映" in system_prompt
+
+
+def test_run_advice_prompt_carries_context_news_feeds_and_jst_now():
+    from unittest.mock import MagicMock, patch
+
+    from src.agent import AdviceResult, run_advice
+
+    result = MagicMock()
+    result.structured_output = AdviceResult(summary="s", advices=[])
+
+    with (
+        patch("src.agent.BedrockModel"),
+        patch("src.agent.Agent") as mock_agent,
+    ):
+        mock_agent.return_value.return_value = result
+        run_advice(
+            context="商品一覧と基準価額",
+            trading_notes="",
+            news_feeds=[{"url": "https://example.com/rss", "name": "市況ニュース"}],
+            now=datetime(2026, 7, 24, 8, 0, tzinfo=UTC),
+        )
+
+    prompt = mock_agent.return_value.call_args[0][0]
+    assert "商品一覧と基準価額" in prompt
+    assert "https://example.com/rss" in prompt
+    assert "市況ニュース" in prompt
+    # 08:00 UTC = 17:00 JST
+    assert "2026-07-24 17:00 JST" in prompt
+
+
+def test_run_advice_registers_the_advisor_tools():
+    from unittest.mock import MagicMock, patch
+
+    from src.agent import AdviceResult, run_advice
+
+    result = MagicMock()
+    result.structured_output = AdviceResult(summary="s", advices=[])
+
+    with (
+        patch("src.agent.BedrockModel"),
+        patch("src.agent.Agent") as mock_agent,
+    ):
+        mock_agent.return_value.return_value = result
+        run_advice("ctx", "", [], datetime(2026, 7, 24, 8, 0, tzinfo=UTC))
+
+    tools = mock_agent.call_args.kwargs["tools"]
+    # api_fetch is what fetches the USD/JPY rate, so it must be registered.
+    assert len(tools) == 4
+
+
+def test_run_advice_raises_without_structured_output():
+    from unittest.mock import MagicMock, patch
+
+    import pytest
+    from src.agent import run_advice
+
+    result = MagicMock()
+    result.structured_output = None
+
+    with (
+        patch("src.agent.BedrockModel"),
+        patch("src.agent.Agent") as mock_agent,
+    ):
+        mock_agent.return_value.return_value = result
+        with pytest.raises(ValueError, match="structured output"):
+            run_advice("ctx", "", [], datetime(2026, 7, 24, 8, 0, tzinfo=UTC))

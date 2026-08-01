@@ -8,7 +8,7 @@ from src import config
 logger = logging.getLogger(__name__)
 
 _SECTION_LIMIT = 3000
-_HEADER_LIMIT = 150
+HEADER_LIMIT = 150
 
 
 def _section_blocks(text: str) -> list[dict[str, Any]]:
@@ -47,7 +47,7 @@ def post_message(
         blocks.append(
             {
                 "type": "header",
-                "text": {"type": "plain_text", "text": header[:_HEADER_LIMIT]},
+                "text": {"type": "plain_text", "text": header[:HEADER_LIMIT]},
             }
         )
         blocks.append({"type": "divider"})

@@ -14,15 +14,18 @@ def reload_modules():
     import src.store as store
 
     importlib.reload(store)
+    yield
 
 
 @pytest.fixture(autouse=True)
 def mock_run_plan():
     """Allow posting with the 24h-fallback window unless a test overrides it."""
+    import src.digest as digest
     from src.agent import DigestPlan
 
+    importlib.reload(digest)
     with patch(
-        "src.handler.run_plan",
+        "src.digest.run_plan",
         return_value=DigestPlan(should_post=True, since=None, reason="毎日"),
     ) as mock:
         yield mock
@@ -64,12 +67,12 @@ def test_handler_posts_summary_headline_then_threaded_reply(integrated_aws_mock)
     url = "https://aws.amazon.com/blogs/aws/feed/"
 
     with (
-        patch("src.handler.run_digest", return_value="digest body") as mock_run,
+        patch("src.digest.run_digest", return_value="digest body") as mock_run,
         patch(
-            "src.handler.run_headline", return_value="headline summary"
+            "src.digest.run_headline", return_value="headline summary"
         ) as mock_headline,
         patch(
-            "src.handler.slack_notifier.post_message", return_value="111.222"
+            "src.digest.slack_notifier.post_message", return_value="111.222"
         ) as mock_post,
     ):
         result = lambda_handler({"scheduled_time": scheduled_time}, None)
@@ -114,9 +117,9 @@ def test_handler_generates_all_digests_before_posting(integrated_aws_mock):
 
     manager = MagicMock()
     with (
-        patch("src.handler.run_digest", return_value="digest") as mock_run,
-        patch("src.handler.run_headline", return_value="summary"),
-        patch("src.handler.slack_notifier.post_message", return_value="t") as mock_post,
+        patch("src.digest.run_digest", return_value="digest") as mock_run,
+        patch("src.digest.run_headline", return_value="summary"),
+        patch("src.digest.slack_notifier.post_message", return_value="t") as mock_post,
     ):
         manager.attach_mock(mock_run, "run_digest")
         manager.attach_mock(mock_post, "post_message")
@@ -142,9 +145,9 @@ def test_handler_posts_one_reply_per_item(integrated_aws_mock):
     from src.handler import lambda_handler
 
     with (
-        patch("src.handler.run_digest", return_value="digest"),
-        patch("src.handler.run_headline", return_value="summary"),
-        patch("src.handler.slack_notifier.post_message", return_value="t") as mock_post,
+        patch("src.digest.run_digest", return_value="digest"),
+        patch("src.digest.run_headline", return_value="summary"),
+        patch("src.digest.slack_notifier.post_message", return_value="t") as mock_post,
     ):
         result = lambda_handler({"scheduled_time": "2026-06-01T00:00:00Z"}, None)
 
@@ -174,9 +177,9 @@ def test_handler_excludes_failed_digest_from_headline_and_replies(
         return "digest"
 
     with (
-        patch("src.handler.run_digest", side_effect=fail_for_bad),
-        patch("src.handler.run_headline", return_value="summary") as mock_headline,
-        patch("src.handler.slack_notifier.post_message", return_value="t") as mock_post,
+        patch("src.digest.run_digest", side_effect=fail_for_bad),
+        patch("src.digest.run_headline", return_value="summary") as mock_headline,
+        patch("src.digest.slack_notifier.post_message", return_value="t") as mock_post,
     ):
         result = lambda_handler({"scheduled_time": "2026-06-01T00:00:00Z"}, None)
 
@@ -197,9 +200,9 @@ def test_handler_falls_back_to_empty_headline_on_generation_error(
     from src.handler import lambda_handler
 
     with (
-        patch("src.handler.run_digest", return_value="digest"),
-        patch("src.handler.run_headline", side_effect=RuntimeError("bedrock down")),
-        patch("src.handler.slack_notifier.post_message", return_value="t") as mock_post,
+        patch("src.digest.run_digest", return_value="digest"),
+        patch("src.digest.run_headline", side_effect=RuntimeError("bedrock down")),
+        patch("src.digest.slack_notifier.post_message", return_value="t") as mock_post,
     ):
         result = lambda_handler({"scheduled_time": "2026-06-01T00:00:00Z"}, None)
 
@@ -214,10 +217,10 @@ def test_handler_records_error_when_headline_post_fails(integrated_aws_mock):
     from src.handler import lambda_handler
 
     with (
-        patch("src.handler.run_digest", return_value="digest"),
-        patch("src.handler.run_headline", return_value="summary"),
+        patch("src.digest.run_digest", return_value="digest"),
+        patch("src.digest.run_headline", return_value="summary"),
         patch(
-            "src.handler.slack_notifier.post_message",
+            "src.digest.slack_notifier.post_message",
             side_effect=RuntimeError("slack down"),
         ) as mock_post,
     ):
@@ -240,9 +243,9 @@ def test_handler_uses_plan_since_for_digest(integrated_aws_mock, mock_run_plan):
     )
 
     with (
-        patch("src.handler.run_digest", return_value="digest") as mock_run,
-        patch("src.handler.run_headline", return_value="summary"),
-        patch("src.handler.slack_notifier.post_message", return_value="t"),
+        patch("src.digest.run_digest", return_value="digest") as mock_run,
+        patch("src.digest.run_headline", return_value="summary"),
+        patch("src.digest.slack_notifier.post_message", return_value="t"),
     ):
         lambda_handler({"scheduled_time": "2026-06-01T00:00:00Z"}, None)
 
@@ -262,8 +265,8 @@ def test_handler_skips_source_not_scheduled_today(integrated_aws_mock, mock_run_
     )
 
     with (
-        patch("src.handler.run_digest") as mock_run,
-        patch("src.handler.slack_notifier.post_message") as mock_post,
+        patch("src.digest.run_digest") as mock_run,
+        patch("src.digest.slack_notifier.post_message") as mock_post,
     ):
         result = lambda_handler({"scheduled_time": "2026-06-01T00:00:00Z"}, None)
 
@@ -280,9 +283,9 @@ def test_handler_falls_back_to_24h_when_plan_fails(integrated_aws_mock, mock_run
     expected_until = datetime.fromisoformat(scheduled_time)
 
     with (
-        patch("src.handler.run_digest", return_value="digest") as mock_run,
-        patch("src.handler.run_headline", return_value="summary"),
-        patch("src.handler.slack_notifier.post_message", return_value="t"),
+        patch("src.digest.run_digest", return_value="digest") as mock_run,
+        patch("src.digest.run_headline", return_value="summary"),
+        patch("src.digest.slack_notifier.post_message", return_value="t"),
     ):
         result = lambda_handler({"scheduled_time": scheduled_time}, None)
 
@@ -306,9 +309,9 @@ def test_handler_passes_schedule_to_plan(integrated_aws_mock, mock_run_plan):
     from src.handler import lambda_handler
 
     with (
-        patch("src.handler.run_digest", return_value="digest"),
-        patch("src.handler.run_headline", return_value="summary"),
-        patch("src.handler.slack_notifier.post_message", return_value="t"),
+        patch("src.digest.run_digest", return_value="digest"),
+        patch("src.digest.run_headline", return_value="summary"),
+        patch("src.digest.slack_notifier.post_message", return_value="t"),
     ):
         lambda_handler({"scheduled_time": "2026-06-01T00:00:00Z"}, None)
 
@@ -324,9 +327,9 @@ def test_handler_passes_default_schedule_when_field_missing(
     from src.handler import lambda_handler
 
     with (
-        patch("src.handler.run_digest", return_value="digest"),
-        patch("src.handler.run_headline", return_value="summary"),
-        patch("src.handler.slack_notifier.post_message", return_value="t"),
+        patch("src.digest.run_digest", return_value="digest"),
+        patch("src.digest.run_headline", return_value="summary"),
+        patch("src.digest.slack_notifier.post_message", return_value="t"),
     ):
         lambda_handler({"scheduled_time": "2026-06-01T00:00:00Z"}, None)
 
@@ -356,9 +359,9 @@ def test_handler_splits_daily_item_into_one_reply_per_day(integrated_aws_mock):
     ]
 
     with (
-        patch("src.handler.run_daily_digests", return_value=days),
-        patch("src.handler.run_headline", return_value="summary") as mock_headline,
-        patch("src.handler.slack_notifier.post_message", return_value="t") as mock_post,
+        patch("src.digest.run_daily_digests", return_value=days),
+        patch("src.digest.run_headline", return_value="summary") as mock_headline,
+        patch("src.digest.slack_notifier.post_message", return_value="t") as mock_post,
     ):
         result = lambda_handler({"scheduled_time": "2026-06-11T00:00:00Z"}, None)
 
@@ -394,10 +397,10 @@ def test_handler_posts_no_reply_for_daily_item_without_articles(integrated_aws_m
     )
 
     with (
-        patch("src.handler.run_daily_digests", return_value=[]),
-        patch("src.handler.run_digest", return_value="digest"),
-        patch("src.handler.run_headline", return_value="summary"),
-        patch("src.handler.slack_notifier.post_message", return_value="t") as mock_post,
+        patch("src.digest.run_daily_digests", return_value=[]),
+        patch("src.digest.run_digest", return_value="digest"),
+        patch("src.digest.run_headline", return_value="summary"),
+        patch("src.digest.slack_notifier.post_message", return_value="t") as mock_post,
     ):
         result = lambda_handler({"scheduled_time": "2026-06-11T00:00:00Z"}, None)
 
@@ -425,10 +428,10 @@ def test_handler_records_error_when_daily_digest_fails(integrated_aws_mock):
     )
 
     with (
-        patch("src.handler.run_daily_digests", side_effect=RuntimeError("boom")),
-        patch("src.handler.run_digest", return_value="digest"),
-        patch("src.handler.run_headline", return_value="summary"),
-        patch("src.handler.slack_notifier.post_message", return_value="t") as mock_post,
+        patch("src.digest.run_daily_digests", side_effect=RuntimeError("boom")),
+        patch("src.digest.run_digest", return_value="digest"),
+        patch("src.digest.run_headline", return_value="summary"),
+        patch("src.digest.slack_notifier.post_message", return_value="t") as mock_post,
     ):
         result = lambda_handler({"scheduled_time": "2026-06-11T00:00:00Z"}, None)
 
@@ -456,3 +459,51 @@ def test_parse_scheduled_time_invalid_falls_back_to_now():
     dt = _parse_scheduled_time({"scheduled_time": "<aws.scheduler.scheduled-time>"})
     after = datetime.now(UTC)
     assert before <= dt <= after
+
+
+def test_handler_dispatches_to_the_advisor_job(integrated_aws_mock):
+    from src.handler import lambda_handler
+
+    with (
+        patch(
+            "src.handler.run_advisor_job", return_value={"status": "ok", "advisors": 1}
+        ) as mock_advisor,
+        patch("src.handler.run_digest_job") as mock_digest,
+    ):
+        result = lambda_handler(
+            {"job": "advisor", "scheduled_time": "2026-07-24T08:00:00Z"}, None
+        )
+
+    assert result == {"status": "ok", "advisors": 1}
+    mock_digest.assert_not_called()
+    mock_advisor.assert_called_once_with(datetime.fromisoformat("2026-07-24T08:00:00Z"))
+
+
+def test_handler_defaults_to_the_digest_job(integrated_aws_mock):
+    from src.handler import lambda_handler
+
+    with (
+        patch("src.handler.run_advisor_job") as mock_advisor,
+        patch(
+            "src.handler.run_digest_job", return_value={"status": "ok", "sources": 0}
+        ) as mock_digest,
+    ):
+        lambda_handler({"scheduled_time": "2026-06-01T00:00:00Z"}, None)
+
+    mock_advisor.assert_not_called()
+    mock_digest.assert_called_once()
+
+
+def test_handler_treats_an_unknown_job_as_digest(integrated_aws_mock):
+    from src.handler import lambda_handler
+
+    with (
+        patch("src.handler.run_advisor_job") as mock_advisor,
+        patch(
+            "src.handler.run_digest_job", return_value={"status": "ok", "sources": 0}
+        ) as mock_digest,
+    ):
+        lambda_handler({"job": "nonsense"}, None)
+
+    mock_advisor.assert_not_called()
+    mock_digest.assert_called_once()
