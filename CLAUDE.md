@@ -26,7 +26,7 @@ make advisors-list / advisors-add ADVISOR_ID=.. CHANNEL_ID=.. TITLE=.. PRODUCTS=
 make invoke-advisor         # 現在時刻を scheduled_time として本番 Lambda を手動 invoke（advisor ジョブ）
 ```
 
-ツールチェーン（Python 3.14, terraform, tflint, lambroll, aws-cli, pinact）は `mise` 管理。Python 依存は `uv`。`make *-dry` で apply/deploy の差分確認ができる。
+ツールチェーン（Python 3.14, terraform, tflint, lambroll, aws-cli, pinact, prek）は `mise` 管理。Python 依存は `uv`。`make *-dry` で apply/deploy の差分確認ができる。
 
 ## Architecture
 
