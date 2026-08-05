@@ -38,7 +38,7 @@ Lambda (Python 3.14 / uv)
 ```bash
 mise install
 uv sync
-uv run pre-commit install
+prek install
 ```
 
 ## Slack App の作成
@@ -246,7 +246,7 @@ brew install mise
 curl https://mise.run | sh
 ```
 
-2. **ツール一式のインストール**（Python 3.14, Terraform, tflint, lambroll, aws-cli, pinact）:
+2. **ツール一式のインストール**（Python 3.14, Terraform, tflint, lambroll, aws-cli, pinact, prek）:
 
 ```bash
 mise install
@@ -258,10 +258,10 @@ mise install
 uv sync
 ```
 
-4. **Git hooks の登録**（pre-commit + pinact による GitHub Actions ハッシュ固定）:
+4. **Git hooks の登録**（prek + pinact による GitHub Actions ハッシュ固定）:
 
 ```bash
-uv run pre-commit install
+prek install
 ```
 
 5. **テストの実行**:

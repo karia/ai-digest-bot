@@ -5,7 +5,7 @@ export PATH := $(HOME)/.local/share/mise/shims:$(PATH)
 setup:
 	mise install
 	uv sync
-	uv run pre-commit install
+	prek install
 
 # Usage: make config TFSTATE_BUCKET=<bucket-name>
 # Writes the git-ignored backend config that injects the tfstate bucket (kept out of the public repo).
