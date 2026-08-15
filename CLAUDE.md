@@ -9,6 +9,15 @@ Bedrock 上の Strands Agent を使って Slack に日本語で情報配信す�
 - **digest**: 技術ブログフィードを日次で取得し、自律的に要約してダイジェストを投稿する。EventBridge（毎日 JST 9:00、`job` なし）→ Lambda が起点。投稿は **ソース単位で 1 スレッド**（ヘッドライン親メッセージ + URL ごとのスレッド返信）
 - **advisor**: iDeCo 等の保有商品について基準価額と市況ニュースから BUY/SELL/HOLD を判断し、投資判断情報を投稿する。EventBridge（毎週金曜 JST 17:00、`job: "advisor"`）→ Lambda が起点。投稿は **アドバイザー単位で 1 スレッド**（市況サマリ + 成績サマリの親メッセージ + 商品ごとのスレッド返信）
 
+## モデルの使い分け
+
+Bedrock のモデルは用途で 2 つに分かれる。どちらも `global.` 推論プロファイル（`jp.` プロファイルは存在しない）。
+
+- `BEDROCK_MODEL_ID`（既定 `global.anthropic.claude-sonnet-5`）— digest 系 4 関数（`run_plan` / `run_digest` / `run_daily_digests` / `run_headline`）。取得済みテキストの要約が主で、軽量モデルで足りる
+- `BEDROCK_ADVICE_MODEL_ID`（既定 `global.anthropic.claude-fable-5`）— `run_advice` のみ。BUY/SELL/HOLD の投資判断は推論の重さが利くため上位モデルを使う
+
+モデルを増やす・変えるときは `terraform/variables.tf` の `bedrock_model_ids` にも足すこと。IAM はこのリストからプロファイルと foundation model の ARN を生成するため、片方だけ変えると実行時に AccessDenied になる。
+
 ## Commands
 
 ```bash

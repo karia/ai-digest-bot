@@ -385,7 +385,7 @@ def run_advice(
         ValueError: if the agent returns no structured output.
     """
     model = BedrockModel(
-        model_id=config.BEDROCK_MODEL_ID,
+        model_id=config.BEDROCK_ADVICE_MODEL_ID,
         region_name=config.AWS_REGION,
     )
     agent = Agent(

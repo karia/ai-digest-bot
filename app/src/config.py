@@ -24,8 +24,14 @@ def get_slack_token() -> str:
 SOURCES_TABLE_NAME: str = os.environ["SOURCES_TABLE_NAME"]
 ADVISORS_TABLE_NAME: str = os.environ["ADVISORS_TABLE_NAME"]
 JUDGMENTS_TABLE_NAME: str = os.environ["JUDGMENTS_TABLE_NAME"]
+# Digest work is summarization against fetched text, so it runs on the lighter
+# model. The advisor's BUY/SELL/HOLD call is the one judgment worth the heavier
+# one, so it has its own setting.
 BEDROCK_MODEL_ID: str = os.environ.get(
-    "BEDROCK_MODEL_ID", "jp.anthropic.claude-sonnet-4-6"
+    "BEDROCK_MODEL_ID", "global.anthropic.claude-sonnet-5"
+)
+BEDROCK_ADVICE_MODEL_ID: str = os.environ.get(
+    "BEDROCK_ADVICE_MODEL_ID", "global.anthropic.claude-fable-5"
 )
 AWS_REGION: str = os.environ.get("AWS_REGION", "ap-northeast-1")
 LOG_LEVEL: str = os.environ.get("LOG_LEVEL", "INFO")
