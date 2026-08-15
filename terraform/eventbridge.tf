@@ -55,10 +55,11 @@ resource "aws_scheduler_schedule" "advisor" {
     mode = "OFF"
   }
 
-  # JST 17:00 (timezone Asia/Tokyo). Runs daily; posting cadence is decided
-  # in-app from interval_days plus the Slack history check, so shortening the
-  # interval needs no infra change.
-  schedule_expression          = "cron(0 17 * * ? *)"
+  # Friday JST 17:00 (timezone Asia/Tokyo). The weekly cadence is pinned here
+  # rather than left to interval_days, so the post always lands on a Friday.
+  # interval_days still gates in-app, which is what keeps a same-day re-invoke
+  # from double-posting.
+  schedule_expression          = "cron(0 17 ? * FRI *)"
   schedule_expression_timezone = "Asia/Tokyo"
 
   target {

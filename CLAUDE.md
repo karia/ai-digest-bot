@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Bedrock 上の Strands Agent を使って Slack に日本語で情報配信する Lambda Bot。1 つの Lambda に **digest** と **advisor** の 2 系統のジョブがあり、EventBridge の `job` フィールド（`app/src/handler.py:lambda_handler`）で分岐する。
 
 - **digest**: 技術ブログフィードを日次で取得し、自律的に要約してダイジェストを投稿する。EventBridge（毎日 JST 9:00、`job` なし）→ Lambda が起点。投稿は **ソース単位で 1 スレッド**（ヘッドライン親メッセージ + URL ごとのスレッド返信）
-- **advisor**: iDeCo 等の保有商品について基準価額と市況ニュースから BUY/SELL/HOLD を判断し、投資判断情報を投稿する。EventBridge（毎日 JST 17:00、`job: "advisor"`）→ Lambda が起点。投稿は **アドバイザー単位で 1 スレッド**（市況サマリ + 成績サマリの親メッセージ + 商品ごとのスレッド返信）
+- **advisor**: iDeCo 等の保有商品について基準価額と市況ニュースから BUY/SELL/HOLD を判断し、投資判断情報を投稿する。EventBridge（毎週金曜 JST 17:00、`job: "advisor"`）→ Lambda が起点。投稿は **アドバイザー単位で 1 スレッド**（市況サマリ + 成績サマリの親メッセージ + 商品ごとのスレッド返信）
 
 ## Commands
 

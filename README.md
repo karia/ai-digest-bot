@@ -199,7 +199,7 @@ aws dynamodb delete-table --table-name karia-ai-digest-bot-feeds
 
 ## 投資判断アドバイザー（advisor）
 
-保有商品・乗り換え候補（iDeCo 想定）について、基準価額の推移（定量）と市況ニュース・USD/JPY 為替（定性）を Bedrock 上の Agent が調査し、商品ごとに BUY/SELL/HOLD の投資判断情報を Slack へ投稿する、digest とは独立したジョブ系統です。EventBridge（毎日 JST 17:00、`job: "advisor"`）→ Lambda が起点。投稿は **アドバイザー単位で 1 スレッド**にまとまり、市況サマリ・判断変更点・過去推奨の成績サマリ・免責を親メッセージ、商品ごとの判断（前回 → 今回の変化を含む）をスレッド返信として届けます。判断履歴は DynamoDB `advisor-judgments` テーブルに保存され、次回実行時の成績検証（騰落率）に使われます。投稿間隔は `interval_days`（既定7日）で、同一日の再実行は Slack 履歴の読み取りにより重複投稿しません。
+保有商品・乗り換え候補（iDeCo 想定）について、基準価額の推移（定量）と市況ニュース・USD/JPY 為替（定性）を Bedrock 上の Agent が調査し、商品ごとに BUY/SELL/HOLD の投資判断情報を Slack へ投稿する、digest とは独立したジョブ系統です。EventBridge（毎週金曜 JST 17:00、`job: "advisor"`）→ Lambda が起点。投稿は **アドバイザー単位で 1 スレッド**にまとまり、市況サマリ・判断変更点・過去推奨の成績サマリ・免責を親メッセージ、商品ごとの判断（前回 → 今回の変化を含む）をスレッド返信として届けます。判断履歴は DynamoDB `advisor-judgments` テーブルに保存され、次回実行時の成績検証（騰落率）に使われます。投稿間隔は `interval_days`（既定7日）で、同一日の再実行は Slack 履歴の読み取りにより重複投稿しません。
 
 ### 登録
 
