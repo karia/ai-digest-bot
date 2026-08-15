@@ -27,6 +27,18 @@ from src.advisor_store import (
 _PRODUCT_FIELDS = ("isin", "name", "category", "holding", "assoc_fund_cd")
 _FEED_FIELDS = ("url", "name")
 
+# Monday=0 … Sunday=6, matching datetime.date.weekday().
+_WEEKDAY_NAMES = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
+
+
+def _parse_weekday(raw: str) -> int:
+    try:
+        return _WEEKDAY_NAMES.index(raw.strip().upper())
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"--post-weekday must be one of {', '.join(_WEEKDAY_NAMES)}"
+        ) from None
+
 
 def _load_json_list(raw: str, label: str) -> list[dict[str, Any]]:
     try:
@@ -66,9 +78,15 @@ def cmd_list(args: argparse.Namespace) -> None:
         print("No advisors registered.")
         return
     for advisor in advisors:
+        weekday = advisor.get("post_weekday")
+        cadence = (
+            f"every {_WEEKDAY_NAMES[weekday]}"
+            if weekday is not None
+            else f"every {advisor['interval_days']}d"
+        )
         print(
             f"# {advisor['advisor_id']}  ({advisor['channel_id']})"
-            f"  [{advisor['title']}]  every {advisor['interval_days']}d"
+            f"  [{advisor['title']}]  {cadence}"
         )
         for product in advisor["products"]:
             mark = "保有" if product.get("holding") else "候補"
@@ -85,20 +103,28 @@ def cmd_list(args: argparse.Namespace) -> None:
 
 
 def cmd_add(args: argparse.Namespace) -> None:
-    add_advisor(
-        advisor_id=args.advisor_id,
-        channel_id=args.channel_id,
-        title=args.title,
-        products=args.products_json,
-        news_feeds=args.news_feeds_json,
-        trading_notes=args.trading_notes,
-        interval_days=args.interval_days,
+    try:
+        add_advisor(
+            advisor_id=args.advisor_id,
+            channel_id=args.channel_id,
+            title=args.title,
+            products=args.products_json,
+            news_feeds=args.news_feeds_json,
+            trading_notes=args.trading_notes,
+            interval_days=args.interval_days,
+            post_weekday=args.post_weekday,
+        )
+    except ValueError as e:
+        raise SystemExit(f"error: {e}") from e
+    cadence = (
+        f"every {_WEEKDAY_NAMES[args.post_weekday]}"
+        if args.post_weekday is not None
+        else f"every {args.interval_days}d"
     )
     print(
         f"Added/updated: {args.advisor_id} -> {args.channel_id}"
         f" ({len(args.products_json)} product(s),"
-        f" {len(args.news_feeds_json)} feed(s),"
-        f" every {args.interval_days}d)"
+        f" {len(args.news_feeds_json)} feed(s), {cadence})"
     )
 
 
@@ -148,7 +174,20 @@ def main() -> None:
         "--interval-days",
         type=int,
         default=DEFAULT_INTERVAL_DAYS,
-        help=f"Minimum days between posts (default: {DEFAULT_INTERVAL_DAYS})",
+        help=(
+            f"Minimum days between posts (default: {DEFAULT_INTERVAL_DAYS})."
+            " Ignored when --post-weekday is given"
+        ),
+    )
+    p_add.add_argument(
+        "--post-weekday",
+        type=_parse_weekday,
+        default=None,
+        metavar="|".join(_WEEKDAY_NAMES),
+        help=(
+            "Post on this JST weekday instead of on an interval."
+            " A missed target day is picked up by a later run"
+        ),
     )
     p_add.set_defaults(func=cmd_add)
 

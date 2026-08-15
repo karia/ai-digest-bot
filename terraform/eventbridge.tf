@@ -55,9 +55,10 @@ resource "aws_scheduler_schedule" "advisor" {
     mode = "OFF"
   }
 
-  # JST 17:00 (timezone Asia/Tokyo). Runs daily; posting cadence is decided
-  # in-app from interval_days plus the Slack history check, so shortening the
-  # interval needs no infra change.
+  # JST 17:00 daily. Which day actually posts is decided in-app from the
+  # advisor's post_weekday, so a run that fails on the target day is retried by
+  # the next day's invocation instead of waiting a whole week. Pinning the day
+  # here instead would remove that retry.
   schedule_expression          = "cron(0 17 * * ? *)"
   schedule_expression_timezone = "Asia/Tokyo"
 

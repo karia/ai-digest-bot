@@ -2,9 +2,11 @@ data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
 locals {
-  # Strip the inference-profile region prefix (e.g. "jp.") to get the base
-  # foundation model name used in foundation-model ARNs.
-  bedrock_foundation_model = replace(var.bedrock_model_id, "jp.", "")
+  # Strip the inference-profile scope prefix ("global." / "jp.") to get the
+  # base foundation model name used in foundation-model ARNs.
+  bedrock_foundation_models = [
+    for id in var.bedrock_model_ids : trimprefix(trimprefix(id, "global."), "jp.")
+  ]
 }
 
 # Dummy zip for initial deployment (lambroll handles actual code)
@@ -76,13 +78,28 @@ resource "aws_iam_policy" "lambda_bedrock" {
     Statement = [{
       Effect = "Allow"
       Action = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
-      Resource = [
-        # The inference profile the app invokes
-        "arn:aws:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:inference-profile/${var.bedrock_model_id}",
-        # Foundation models the jp profile routes to (ap-northeast-1 / ap-northeast-3)
-        "arn:aws:bedrock:ap-northeast-1::foundation-model/${local.bedrock_foundation_model}",
-        "arn:aws:bedrock:ap-northeast-3::foundation-model/${local.bedrock_foundation_model}",
-      ]
+      Resource = concat(
+        # The inference profiles the app invokes
+        [
+          for id in var.bedrock_model_ids :
+          "arn:aws:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:inference-profile/${id}"
+        ],
+        # Foundation models those profiles route to. A global. profile carries
+        # a region-less ARN plus the in-region one; jp. profiles route to
+        # ap-northeast-1 / ap-northeast-3.
+        [
+          for m in local.bedrock_foundation_models :
+          "arn:aws:bedrock:::foundation-model/${m}"
+        ],
+        [
+          for m in local.bedrock_foundation_models :
+          "arn:aws:bedrock:ap-northeast-1::foundation-model/${m}"
+        ],
+        [
+          for m in local.bedrock_foundation_models :
+          "arn:aws:bedrock:ap-northeast-3::foundation-model/${m}"
+        ],
+      )
     }]
   })
 }

@@ -199,7 +199,7 @@ aws dynamodb delete-table --table-name karia-ai-digest-bot-feeds
 
 ## 投資判断アドバイザー（advisor）
 
-保有商品・乗り換え候補（iDeCo 想定）について、基準価額の推移（定量）と市況ニュース・USD/JPY 為替（定性）を Bedrock 上の Agent が調査し、商品ごとに BUY/SELL/HOLD の投資判断情報を Slack へ投稿する、digest とは独立したジョブ系統です。EventBridge（毎日 JST 17:00、`job: "advisor"`）→ Lambda が起点。投稿は **アドバイザー単位で 1 スレッド**にまとまり、市況サマリ・判断変更点・過去推奨の成績サマリ・免責を親メッセージ、商品ごとの判断（前回 → 今回の変化を含む）をスレッド返信として届けます。判断履歴は DynamoDB `advisor-judgments` テーブルに保存され、次回実行時の成績検証（騰落率）に使われます。投稿間隔は `interval_days`（既定7日）で、同一日の再実行は Slack 履歴の読み取りにより重複投稿しません。
+保有商品・乗り換え候補（iDeCo 想定）について、基準価額の推移（定量）と市況ニュース・USD/JPY 為替（定性）を Bedrock 上の Agent が調査し、商品ごとに BUY/SELL/HOLD の投資判断情報を Slack へ投稿する、digest とは独立したジョブ系統です。EventBridge（毎日 JST 17:00、`job: "advisor"`）→ Lambda が起点。投稿は **アドバイザー単位で 1 スレッド**にまとまり、市況サマリ・判断変更点・過去推奨の成績サマリ・免責を親メッセージ、商品ごとの判断（前回 → 今回の変化を含む）をスレッド返信として届けます。判断履歴は DynamoDB `advisor-judgments` テーブルに保存され、次回実行時の成績検証（騰落率）に使われます。投稿日は `POST_WEEKDAY`（`FRI` など JST の曜日）で指定します。起動自体は毎日なので、目標曜日の実行が失敗しても翌日以降の実行が取りこぼしを拾います。`POST_WEEKDAY` を指定しない場合は `interval_days`（既定7日）による間隔判定になり、投稿日は最初の投稿日に引きずられます。いずれも同一日の再実行では重複投稿しません。
 
 ### 登録
 
@@ -210,8 +210,10 @@ make advisors-add ADVISOR_ID=ideco-sbi CHANNEL_ID=CXXXXXXXXXX TITLE="iDeCo 投�
   PRODUCTS='[{"isin":"JP90C000H1T1","name":"eMAXIS Slim 全世界株式(オール・カントリー)","category":"全世界株","holding":true,"assoc_fund_cd":"0331418A"}]' \
   NEWS_FEEDS='[{"url":"https://example.com/rss","name":"市況ニュース"}]' \
   TRADING_NOTES="スイッチングは指示から完了まで概ね1週間から10日。掛金の配分変更は翌月拠出分から反映。" \
-  INTERVAL_DAYS=7
+  POST_WEEKDAY=FRI
 ```
+
+`POST_WEEKDAY` は `MON`〜`SUN` で指定します（省略時は `INTERVAL_DAYS` による間隔判定）。両方指定した場合は `POST_WEEKDAY` が優先されます。
 
 商品は `isin` / `name` / `category` / `holding` / `assoc_fund_cd`（投資信託協会のファンドコード。基準価額取得に使用）の5フィールドを持つため、`sources` の `url|name` 形式では表現しきれず `PRODUCTS` / `NEWS_FEEDS` は JSON 配列で指定します。`make advisors-add` は full upsert のため、既存の `ADVISOR_ID` に再実行すると省略したフィールドもクリアされる点に注意してください。
 
@@ -231,6 +233,10 @@ make invoke-advisor
 advisor は `channels:history`（または `groups:history`）で bot 自身の前回投稿を検索して冪等性を判定します。digest と同じく、bot がこのスコープを持ち、投稿先チャンネルに**参加している**必要があります（未参加の場合は誤って重複投稿するより安全側に倒し、投稿せずエラー終了します）。
 
 **digest と advisor は必ず別チャンネルに投稿してください。** digest の `slack_last_bot_post` はヘッダーを見ずに bot の直前の投稿を探すため、advisor と同一チャンネルに同居させると advisor のスレッドを拾ってしまい、digest の対象期間計算が狂います（advisor 側は `title` でヘッダーフィルタしているため、この問題の影響は受けません）。詳細は [ADR 0001 の Consequences](docs/adr/0001-ideco-investment-advisor.md) を参照してください。
+
+**`TITLE` は表示用ヘッダーであると同時に冪等性の目印です。** advisor は「自分の `title` をヘッダーに持つ過去の投稿」を探して投稿済みかを判定するため、`TITLE` を変更すると過去の投稿が見つからなくなり、`interval_days` を待たずにその場で投稿します。誤字修正などで変更するときは、次回投稿が前倒しで発火することを織り込んでください。
+
+同じ理由から、**同一チャンネルに同じ `TITLE` のアドバイザーを2つ登録することはできません**（`make advisors-add` が拒否します）。登録できてしまうと、片方がもう片方の投稿を自分のものと誤認し、永久に skip し続けます。チャンネルが違えば同じ `TITLE` を使えます。
 
 ## How to Contribute
 

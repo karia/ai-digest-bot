@@ -161,3 +161,52 @@ def test_put_judgments_records_inserted_at(advisor_tables):
     )["Item"]
 
     assert datetime.fromisoformat(item["inserted_at"]) >= before
+
+
+def test_add_advisor_rejects_a_duplicate_title_in_the_same_channel(advisor_tables):
+    """The (channel, title) pair is the Slack idempotency marker."""
+    import pytest
+    from src.advisor_store import add_advisor
+
+    with pytest.raises(ValueError, match="unique per channel"):
+        add_advisor(
+            advisor_id="ideco-rakuten",
+            channel_id="CADVISOR01",
+            title="iDeCo 投資判断",
+            products=[],
+            news_feeds=[],
+            trading_notes="",
+        )
+
+
+def test_add_advisor_allows_the_same_title_in_another_channel(advisor_tables):
+    from src.advisor_store import add_advisor, get_all_advisors
+
+    add_advisor(
+        advisor_id="ideco-rakuten",
+        channel_id="CADVISOR02",
+        title="iDeCo 投資判断",
+        products=[],
+        news_feeds=[],
+        trading_notes="",
+    )
+
+    assert len(get_all_advisors()) == 2
+
+
+def test_add_advisor_still_updates_itself_in_place(advisor_tables):
+    """Re-adding the same advisor_id must not trip the duplicate check."""
+    from src.advisor_store import add_advisor, get_all_advisors
+
+    add_advisor(
+        advisor_id="ideco-sbi",
+        channel_id="CADVISOR01",
+        title="iDeCo 投資判断",
+        products=[],
+        news_feeds=[],
+        trading_notes="updated",
+    )
+
+    advisors = get_all_advisors()
+    assert len(advisors) == 1
+    assert advisors[0]["trading_notes"] == "updated"

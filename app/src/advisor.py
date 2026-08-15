@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from src import config, slack_notifier
@@ -20,7 +20,7 @@ from src.performance import (
     latest_judgment_by_isin,
     summarize_nav,
 )
-from src.slack_reader import find_last_post_time, should_post
+from src.slack_reader import find_last_post_time, lookback_days_for, should_post
 
 logger = logging.getLogger(__name__)
 
@@ -71,24 +71,30 @@ def _process_advisor(advisor: Advisor, now: datetime) -> str:
     channel = advisor["channel_id"]
     title = advisor["title"]
     products = advisor["products"]
+    interval_days = advisor["interval_days"]
 
     # Idempotency: a read failure must never be treated as "not posted yet",
     # so it aborts this advisor instead of risking a duplicate post.
     try:
-        last_post = find_last_post_time(channel, title)
+        last_post = find_last_post_time(
+            channel, title, lookback_days=lookback_days_for(interval_days)
+        )
     except Exception as e:
         logger.error(
             "Cannot read Slack history for %s: %s", advisor_id, e, exc_info=True
         )
         return f"error: slack history unreadable: {e}"
 
-    posting, reason = should_post(last_post, now, advisor["interval_days"])
+    posting, reason = should_post(
+        last_post, now, interval_days, advisor.get("post_weekday")
+    )
     logger.info("Posting decision for %s: %s (%s)", advisor_id, posting, reason)
     if not posting:
         return f"skipped: {reason}"
 
     current_navs: dict[str, int] = {}
     nav_summaries: dict[str, str] = {}
+    nav_dates: list[date] = []
     for product in products:
         try:
             series = fetch_nav_series(product["isin"], product["assoc_fund_cd"])
@@ -100,11 +106,16 @@ def _process_advisor(advisor: Advisor, now: datetime) -> str:
             continue
         current_navs[product["isin"]] = series[-1].nav
         nav_summaries[product["isin"]] = summarize_nav(series)
+        nav_dates.append(series[-1].date)
 
     history = get_judgment_history(advisor_id, limit=HISTORY_LIMIT)
     product_names = {p["isin"]: p["name"] for p in products}
     performance_rows = build_performance(history, current_navs, product_names)
-    performance_text = format_performance_summary(performance_rows)
+    # The oldest of the series, not the newest: one fresh product must not
+    # mask a stale one, which is the whole point of showing the date.
+    performance_text = format_performance_summary(
+        performance_rows, as_of=min(nav_dates) if nav_dates else None
+    )
     previous_codes = latest_judgment_by_isin(history)
     previous_labels = {
         isin: JUDGMENT_LABELS.get(code, code) for isin, code in previous_codes.items()
@@ -121,6 +132,27 @@ def _process_advisor(advisor: Advisor, now: datetime) -> str:
     except Exception as e:
         logger.error("Advice failed for %s: %s", advisor_id, e, exc_info=True)
         return f"error: {e}"
+
+    # The prompt demands one judgment per product, but a silent omission would
+    # otherwise cost that product its reply and its history row unnoticed.
+    wanted = {p["isin"] for p in products}
+    judged = {a.isin for a in advice.advices}
+    if missing := wanted - judged:
+        logger.warning(
+            "Advice for %s omitted %d product(s): %s",
+            advisor_id,
+            len(missing),
+            ", ".join(sorted(missing)),
+        )
+    # An invented ISIN still gets a reply headed with the raw code and a
+    # history row scored at nav 0, so it should not pass unnoticed either.
+    if unexpected := judged - wanted:
+        logger.warning(
+            "Advice for %s judged %d unregistered product(s): %s",
+            advisor_id,
+            len(unexpected),
+            ", ".join(sorted(unexpected)),
+        )
 
     parent_text = (
         f"{advice.summary}\n\n*過去推奨の成績*\n{performance_text}\n\n{DISCLAIMER}"

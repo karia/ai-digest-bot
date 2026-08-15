@@ -141,3 +141,37 @@ def test_summarize_nav_omits_windows_without_data():
     text = summarize_nav([NavPoint(date=date(2026, 7, 24), nav=30000)])
 
     assert text == "最新 2026-07-24 30,000円"
+
+
+def test_format_performance_summary_shows_the_as_of_date():
+    from datetime import date as _date
+
+    from src.performance import build_performance, format_performance_summary
+
+    text = format_performance_summary(
+        build_performance(HISTORY, CURRENT, NAMES), as_of=_date(2026, 7, 31)
+    )
+
+    lines = text.splitlines()
+    assert lines[0] == "（基準価額 2026-07-31 時点）"
+    assert lines[1] == "• 2026-07-18 全世界株: 🟢 買い → +10.00%"
+    assert len(lines) == 4
+
+
+def test_format_performance_summary_omits_the_as_of_line_without_a_date():
+    from src.performance import build_performance, format_performance_summary
+
+    text = format_performance_summary(build_performance(HISTORY, CURRENT, NAMES))
+
+    assert len(text.splitlines()) == 3
+    assert "基準価額" not in text
+
+
+def test_format_performance_summary_ignores_as_of_when_there_is_no_history():
+    from datetime import date as _date
+
+    from src.performance import format_performance_summary
+
+    assert format_performance_summary([], as_of=_date(2026, 7, 31)) == (
+        "過去の判断履歴はまだありません。"
+    )

@@ -1,3 +1,4 @@
+import html
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -9,7 +10,20 @@ from src.slack_notifier import HEADER_LIMIT
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_LOOKBACK_DAYS = 30
+
 _bot_user_id_cache: str | None = None
+
+
+def lookback_days_for(interval_days: int) -> int:
+    """How far back to search for the previous post at this posting interval.
+
+    A fixed 30-day window silently caps any interval longer than it: the
+    previous post ages out, no match is found, and the advisor posts again
+    off-cadence. Searching twice the interval keeps at least one prior post
+    inside the window.
+    """
+    return max(DEFAULT_LOOKBACK_DAYS, interval_days * 2)
 
 
 def _get_bot_user_id(client: WebClient) -> str:
@@ -29,16 +43,28 @@ def _has_header(message: dict[str, Any], header: str) -> bool:
     ``header`` is set, and its comparison is truncated-to-truncated on both
     sides). The ``text`` fallback only matters for messages without a
     header block, where ``text`` holds the raw body instead.
+
+    Only what Slack returns is HTML-unescaped, never ``header``: Slack stores
+    ``&``, ``<`` and ``>`` escaped and hands them back that way, so a title
+    containing one would otherwise never match its own post and the advisor
+    would repost every run. Decoding the local ``header`` too would break the
+    other direction — a title holding a literal ``&amp;`` decodes to something
+    Slack never stored. Both forms are accepted in case Slack ever returns
+    block text verbatim.
     """
     truncated = header[:HEADER_LIMIT]
+
+    def matches(found: str) -> bool:
+        return found == truncated or html.unescape(found) == truncated
+
     for block in message.get("blocks") or []:
         if block.get("type") == "header":
-            return str(block.get("text", {}).get("text", "")) == truncated
-    return str(message.get("text", "")) == truncated
+            return matches(str(block.get("text", {}).get("text", "")))
+    return matches(str(message.get("text", "")))
 
 
 def find_last_post_time(
-    channel: str, header: str, lookback_days: int = 30
+    channel: str, header: str, lookback_days: int = DEFAULT_LOOKBACK_DAYS
 ) -> datetime | None:
     """Find when this bot last posted a thread parent with ``header``.
 
@@ -90,14 +116,31 @@ def find_last_post_time(
             return None
 
 
+WEEKDAY_LABELS = ("月", "火", "水", "木", "金", "土", "日")
+
+
 def should_post(
-    last_post: datetime | None, now: datetime, interval_days: int
+    last_post: datetime | None,
+    now: datetime,
+    interval_days: int,
+    post_weekday: int | None = None,
 ) -> tuple[bool, str]:
     """Decide whether this run should post, and why.
 
     Comparison is by JST calendar date, not elapsed hours: the job runs at a
     fixed JST time but invocations can jitter, and an hours-based comparison
     would flip-flop around interval_days=1.
+
+    Args:
+        last_post: When this advisor last posted, or None.
+        now: This run's time.
+        interval_days: Minimum days between posts. Used only when
+            ``post_weekday`` is None — a weekday target sets the cadence by
+            itself, and applying both would let an off-schedule post (a manual
+            recovery, say) push the next scheduled one out by a full period.
+        post_weekday: Target JST weekday, Monday=0 … Sunday=6. When set, the
+            advisor posts once per occurrence of that weekday: on the day
+            itself, or on a later day if that occurrence was missed.
 
     Returns:
         (should_post, reason in Japanese).
@@ -110,6 +153,19 @@ def should_post(
     elapsed = (today - last_day).days
     if elapsed <= 0:
         return False, "本日投稿済みのため投稿しない"
+
+    if post_weekday is not None:
+        # The most recent occurrence of the target weekday, today included.
+        # Posting when it falls after the last post covers both the ordinary
+        # case and a missed target day picked up by a later run.
+        target = today - timedelta(days=(today.weekday() - post_weekday) % 7)
+        label = WEEKDAY_LABELS[post_weekday]
+        if target <= last_day:
+            return False, f"次の{label}曜まで投稿しない（前回投稿 {last_day}）"
+        if target == today:
+            return True, f"{label}曜のため投稿する"
+        return True, f"{target} の{label}曜を逃したため投稿する"
+
     if elapsed < interval_days:
         return (
             False,

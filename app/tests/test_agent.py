@@ -344,3 +344,44 @@ def test_run_advice_raises_without_structured_output():
         mock_agent.return_value.return_value = result
         with pytest.raises(ValueError, match="structured output"):
             run_advice("ctx", "", [], datetime(2026, 7, 24, 8, 0, tzinfo=UTC))
+
+
+def test_run_advice_uses_the_heavier_advice_model():
+    """The judgment call runs on its own model, not the digest one."""
+    from unittest.mock import MagicMock, patch
+
+    from src import config
+    from src.agent import AdviceResult, run_advice
+
+    result = MagicMock()
+    result.structured_output = AdviceResult(summary="s", advices=[])
+
+    with (
+        patch("src.agent.BedrockModel") as mock_model,
+        patch("src.agent.Agent") as mock_agent,
+    ):
+        mock_agent.return_value.return_value = result
+        run_advice("ctx", "", [], datetime(2026, 7, 24, 8, 0, tzinfo=UTC))
+
+    assert mock_model.call_args.kwargs["model_id"] == config.BEDROCK_ADVICE_MODEL_ID
+    assert config.BEDROCK_ADVICE_MODEL_ID != config.BEDROCK_MODEL_ID
+
+
+def test_run_digest_uses_the_lighter_digest_model():
+    from unittest.mock import MagicMock, patch
+
+    from src import config
+    from src.agent import run_digest
+
+    with (
+        patch("src.agent.BedrockModel") as mock_model,
+        patch("src.agent.Agent") as mock_agent,
+    ):
+        mock_agent.return_value.return_value = MagicMock(__str__=lambda s: "body")
+        run_digest(
+            "https://example.com/rss",
+            since=datetime(2026, 7, 23, 0, 0, tzinfo=UTC),
+            until=datetime(2026, 7, 24, 0, 0, tzinfo=UTC),
+        )
+
+    assert mock_model.call_args.kwargs["model_id"] == config.BEDROCK_MODEL_ID
