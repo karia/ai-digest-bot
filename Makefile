@@ -102,14 +102,14 @@ advisors-list:
 #          PRODUCTS='[{"isin":"JP90C000H1T1","name":"eMAXIS Slim 全世界株式(オール・カントリー)","category":"全世界株","holding":true,"assoc_fund_cd":"0331418A"}]' \
 #          NEWS_FEEDS='[{"url":"https://example.com/rss","name":"市況ニュース"}]' \
 #          TRADING_NOTES="スイッチングは指示から完了まで概ね1週間から10日。掛金の配分変更は翌月拠出分から反映。" \
-#          [INTERVAL_DAYS=7]
+#          [INTERVAL_DAYS=7] [POST_WEEKDAY=FRI]
 # Note: full upsert — omitting a field on re-add clears it.
 advisors-add:
 	cd app && PYTHONPATH=. \
 	  ADVISORS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw advisors_table_name)" \
 	  JUDGMENTS_TABLE_NAME="$$(terraform -chdir=../terraform output -raw judgments_table_name)" \
 	  SOURCES_TABLE_NAME="$$(terraform -chdir=../terraform output -raw sources_table_name)" \
-	  uv run python ../scripts/manage_advisors.py add --advisor-id "$(ADVISOR_ID)" --channel-id "$(CHANNEL_ID)" --title "$(TITLE)" --products-json '$(PRODUCTS)' --news-feeds-json '$(NEWS_FEEDS)' --trading-notes "$(TRADING_NOTES)" $(if $(INTERVAL_DAYS),--interval-days "$(INTERVAL_DAYS)")
+	  uv run python ../scripts/manage_advisors.py add --advisor-id "$(ADVISOR_ID)" --channel-id "$(CHANNEL_ID)" --title "$(TITLE)" --products-json '$(PRODUCTS)' --news-feeds-json '$(NEWS_FEEDS)' --trading-notes "$(TRADING_NOTES)" $(if $(INTERVAL_DAYS),--interval-days "$(INTERVAL_DAYS)") $(if $(POST_WEEKDAY),--post-weekday "$(POST_WEEKDAY)")
 
 advisors-delete:
 	cd app && PYTHONPATH=. \

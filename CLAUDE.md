@@ -7,11 +7,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Bedrock 上の Strands Agent を使って Slack に日本語で情報配信する Lambda Bot。1 つの Lambda に **digest** と **advisor** の 2 系統のジョブがあり、EventBridge の `job` フィールド（`app/src/handler.py:lambda_handler`）で分岐する。
 
 - **digest**: 技術ブログフィードを日次で取得し、自律的に要約してダイジェストを投稿する。EventBridge（毎日 JST 9:00、`job` なし）→ Lambda が起点。投稿は **ソース単位で 1 スレッド**（ヘッドライン親メッセージ + URL ごとのスレッド返信）
-- **advisor**: iDeCo 等の保有商品について基準価額と市況ニュースから BUY/SELL/HOLD を判断し、投資判断情報を投稿する。EventBridge（毎週金曜 JST 17:00、`job: "advisor"`）→ Lambda が起点。投稿は **アドバイザー単位で 1 スレッド**（市況サマリ + 成績サマリの親メッセージ + 商品ごとのスレッド返信）
+- **advisor**: iDeCo 等の保有商品について基準価額と市況ニュースから BUY/SELL/HOLD を判断し、投資判断情報を投稿する。EventBridge（毎日 JST 17:00、`job: "advisor"`）→ Lambda が起点。投稿は **アドバイザー単位で 1 スレッド**（市況サマリ + 成績サマリの親メッセージ + 商品ごとのスレッド返信）
 
 ## モデルの使い分け
 
-Bedrock のモデルは用途で 2 つに分かれる。どちらも `global.` 推論プロファイル（`jp.` プロファイルは存在しない）。
+Bedrock のモデルは用途で 2 つに分かれる。どちらも `global.` 推論プロファイル。Sonnet 5 と Fable 5 には `jp.` プロファイルが無いため（`jp.` 自体は sonnet-4-6 や opus-4-8 に存在する）、推論は日本国内に限定されない。この所在地の変更を許容したうえでの選択である。
 
 - `BEDROCK_MODEL_ID`（既定 `global.anthropic.claude-sonnet-5`）— digest 系 4 関数（`run_plan` / `run_digest` / `run_daily_digests` / `run_headline`）。取得済みテキストの要約が主で、軽量モデルで足りる
 - `BEDROCK_ADVICE_MODEL_ID`（既定 `global.anthropic.claude-fable-5`）— `run_advice` のみ。BUY/SELL/HOLD の投資判断は推論の重さが利くため上位モデルを使う
@@ -65,8 +65,8 @@ make invoke-advisor         # 現在時刻を scheduled_time として本番 Lam
 advisor の実行フロー（`app/src/advisor.py:run_advisor_job`）:
 
 1. DynamoDB `advisors` テーブルを全件 scan（`advisor_store.get_all_advisors`）。主キーは `advisor_id`、各アイテムは `channel_id`、`title`（ヘッドライン兼投稿識別子）、`interval_days`、`products`（`{isin, name, category, holding, assoc_fund_cd}` の配列）、`news_feeds`（`{url, name}` の配列）、`trading_notes` を持つ。1 アイテム = 1 スレッド
-2. アドバイザーごとにループ（`_process_advisor`）。まず `slack_reader.find_last_post_time(channel, title)` で **`title` をヘッダーに持つ** bot の前回投稿時刻を検索（最大30日遡る）。digest の `slack_last_bot_post` と違い header でフィルタするため、同一チャンネルに digest や他アドバイザーの投稿があっても混同しない。読み取り自体が失敗した場合は「未投稿」とみなさず処理を中断する（誤って重複投稿するより安全側に倒す）
-3. `slack_reader.should_post(last_post, now, interval_days)` で投稿可否を判定: 前回投稿が同日（JST）、または前回投稿から `interval_days` 日未満なら skip。これにより同日複数回実行しても投稿は1回で、間隔短縮は `interval_days` の変更のみで済む
+2. アドバイザーごとにループ（`_process_advisor`）。まず `slack_reader.find_last_post_time(channel, title)` で **`title` をヘッダーに持つ** bot の前回投稿時刻を検索（遡る日数は `interval_days` から導出。既定30日）。digest の `slack_last_bot_post` と違い header でフィルタするため、同一チャンネルに digest や他アドバイザーの投稿があっても混同しない。読み取り自体が失敗した場合は「未投稿」とみなさず処理を中断する（誤って重複投稿するより安全側に倒す）
+3. `slack_reader.should_post(last_post, now, interval_days)` で投稿可否を判定: 前回投稿が同日（JST）、または前回投稿から `interval_days` 日未満なら skip。`post_weekday`（JST の曜日、月=0）が設定されていればそちらが周期を決め、`interval_days` は参照しない。起動は毎日なので、目標曜日の実行が失敗しても翌日以降の実行が拾う。いずれの場合も同日複数回実行では投稿しない
 4. 投稿対象なら `products` ごとに `nav.fetch_nav_series(isin, assoc_fund_cd)` で投信協会 CSV から基準価額の時系列を取得し（失敗した商品は summary なしで続行）、`performance.summarize_nav` で直近の推移テキストを作る
 5. `advisor_store.get_judgment_history(advisor_id)` で過去の判断履歴（最大8件）を取得し、`performance.build_performance` で前回判断時点の基準価額に対する現在の騰落率を計算、`format_performance_summary` で成績サマリ文にする。`latest_judgment_by_isin` で商品ごとの前回判断も取り出す
 6. 商品一覧・基準価額サマリ・前回判断・成績サマリをまとめたコンテキストを `agent.run_advice(context, trading_notes, news_feeds, now)` に渡す。Agent は `nav_fetch` / `rss_fetch` / `web_scrape` / `api_fetch` を自律選択して市況ニュースと USD/JPY 為替を調査し、商品ごとの `{isin, judgment(BUY/SELL/HOLD), reason}` と市況サマリを構造化出力で返す

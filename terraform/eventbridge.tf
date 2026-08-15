@@ -55,11 +55,11 @@ resource "aws_scheduler_schedule" "advisor" {
     mode = "OFF"
   }
 
-  # Friday JST 17:00 (timezone Asia/Tokyo). The weekly cadence is pinned here
-  # rather than left to interval_days, so the post always lands on a Friday.
-  # interval_days still gates in-app, which is what keeps a same-day re-invoke
-  # from double-posting.
-  schedule_expression          = "cron(0 17 ? * FRI *)"
+  # JST 17:00 daily. Which day actually posts is decided in-app from the
+  # advisor's post_weekday, so a run that fails on the target day is retried by
+  # the next day's invocation instead of waiting a whole week. Pinning the day
+  # here instead would remove that retry.
+  schedule_expression          = "cron(0 17 * * ? *)"
   schedule_expression_timezone = "Asia/Tokyo"
 
   target {

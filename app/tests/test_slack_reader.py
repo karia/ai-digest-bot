@@ -206,3 +206,78 @@ def test_find_last_post_time_matches_a_header_slack_html_escaped(ssm_parameter):
 
     with patch("src.slack_reader.WebClient", return_value=_client([escaped])):
         assert find_last_post_time("C1", header) == posted
+
+
+# 2026-08-07 is a Friday; 08-14 the next one.
+_FRI = 4
+
+
+def _at(day: int, hour: int = 8) -> datetime:
+    return datetime(2026, 8, day, hour, tzinfo=UTC)  # 08:00 UTC = 17:00 JST
+
+
+def test_weekday_target_posts_on_the_target_day():
+    from src.slack_reader import should_post
+
+    ok, reason = should_post(_at(7), _at(14), 7, _FRI)
+
+    assert ok is True
+    assert "金曜のため投稿する" in reason
+
+
+def test_weekday_target_skips_the_days_between():
+    from src.slack_reader import should_post
+
+    for day in (8, 10, 13):
+        ok, _ = should_post(_at(7), _at(day), 7, _FRI)
+        assert ok is False, day
+
+
+def test_weekday_target_picks_up_a_missed_target_day():
+    """A failed Friday must be retried by a later run, not wait a week."""
+    from src.slack_reader import should_post
+
+    ok, reason = should_post(_at(7), _at(15), 7, _FRI)
+
+    assert ok is True
+    assert "逃したため投稿する" in reason
+
+
+def test_weekday_target_does_not_repost_the_same_day():
+    from src.slack_reader import should_post
+
+    ok, reason = should_post(_at(14, 8), _at(14, 9), 7, _FRI)
+
+    assert ok is False
+    assert "本日投稿済み" in reason
+
+
+def test_weekday_target_resumes_on_friday_after_an_off_day_post():
+    """An off-schedule recovery must not push the next Friday out a week."""
+    from src.slack_reader import should_post
+
+    # Posted Monday 08-10 by hand; Friday 08-14 is only 4 days later.
+    ok, _ = should_post(_at(10), _at(14), 7, _FRI)
+
+    assert ok is True
+
+
+def test_interval_still_governs_without_a_weekday_target():
+    from src.slack_reader import should_post
+
+    assert should_post(_at(7), _at(10), 7)[0] is False
+    assert should_post(_at(7), _at(14), 7)[0] is True
+
+
+def test_find_last_post_time_matches_a_title_holding_a_literal_entity(ssm_parameter):
+    """Unescaping the local title too would decode what Slack never stored."""
+    from src.slack_reader import find_last_post_time
+
+    header = "A &amp; B"
+    posted = datetime(2026, 7, 18, 8, 0, tzinfo=UTC)
+
+    with patch(
+        "src.slack_reader.WebClient",
+        return_value=_client([_message(posted, "A &amp;amp; B")]),
+    ):
+        assert find_last_post_time("C1", header) == posted

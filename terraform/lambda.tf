@@ -5,7 +5,7 @@ locals {
   # Strip the inference-profile scope prefix ("global." / "jp.") to get the
   # base foundation model name used in foundation-model ARNs.
   bedrock_foundation_models = [
-    for id in var.bedrock_model_ids : replace(replace(id, "global.", ""), "jp.", "")
+    for id in var.bedrock_model_ids : trimprefix(trimprefix(id, "global."), "jp.")
   ]
 }
 

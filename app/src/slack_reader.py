@@ -44,16 +44,23 @@ def _has_header(message: dict[str, Any], header: str) -> bool:
     sides). The ``text`` fallback only matters for messages without a
     header block, where ``text`` holds the raw body instead.
 
-    Both sides are HTML-unescaped before comparing: Slack stores ``&``, ``<``
-    and ``>`` escaped and hands them back that way, so a title containing one
-    would never match its own post and the advisor would repost every run.
+    Only what Slack returns is HTML-unescaped, never ``header``: Slack stores
+    ``&``, ``<`` and ``>`` escaped and hands them back that way, so a title
+    containing one would otherwise never match its own post and the advisor
+    would repost every run. Decoding the local ``header`` too would break the
+    other direction — a title holding a literal ``&amp;`` decodes to something
+    Slack never stored. Both forms are accepted in case Slack ever returns
+    block text verbatim.
     """
-    truncated = html.unescape(header[:HEADER_LIMIT])
+    truncated = header[:HEADER_LIMIT]
+
+    def matches(found: str) -> bool:
+        return found == truncated or html.unescape(found) == truncated
+
     for block in message.get("blocks") or []:
         if block.get("type") == "header":
-            found = str(block.get("text", {}).get("text", ""))
-            return html.unescape(found) == truncated
-    return html.unescape(str(message.get("text", ""))) == truncated
+            return matches(str(block.get("text", {}).get("text", "")))
+    return matches(str(message.get("text", "")))
 
 
 def find_last_post_time(
@@ -109,14 +116,31 @@ def find_last_post_time(
             return None
 
 
+WEEKDAY_LABELS = ("月", "火", "水", "木", "金", "土", "日")
+
+
 def should_post(
-    last_post: datetime | None, now: datetime, interval_days: int
+    last_post: datetime | None,
+    now: datetime,
+    interval_days: int,
+    post_weekday: int | None = None,
 ) -> tuple[bool, str]:
     """Decide whether this run should post, and why.
 
     Comparison is by JST calendar date, not elapsed hours: the job runs at a
     fixed JST time but invocations can jitter, and an hours-based comparison
     would flip-flop around interval_days=1.
+
+    Args:
+        last_post: When this advisor last posted, or None.
+        now: This run's time.
+        interval_days: Minimum days between posts. Used only when
+            ``post_weekday`` is None — a weekday target sets the cadence by
+            itself, and applying both would let an off-schedule post (a manual
+            recovery, say) push the next scheduled one out by a full period.
+        post_weekday: Target JST weekday, Monday=0 … Sunday=6. When set, the
+            advisor posts once per occurrence of that weekday: on the day
+            itself, or on a later day if that occurrence was missed.
 
     Returns:
         (should_post, reason in Japanese).
@@ -129,6 +153,19 @@ def should_post(
     elapsed = (today - last_day).days
     if elapsed <= 0:
         return False, "本日投稿済みのため投稿しない"
+
+    if post_weekday is not None:
+        # The most recent occurrence of the target weekday, today included.
+        # Posting when it falls after the last post covers both the ordinary
+        # case and a missed target day picked up by a later run.
+        target = today - timedelta(days=(today.weekday() - post_weekday) % 7)
+        label = WEEKDAY_LABELS[post_weekday]
+        if target <= last_day:
+            return False, f"次の{label}曜まで投稿しない（前回投稿 {last_day}）"
+        if target == today:
+            return True, f"{label}曜のため投稿する"
+        return True, f"{target} の{label}曜を逃したため投稿する"
+
     if elapsed < interval_days:
         return (
             False,

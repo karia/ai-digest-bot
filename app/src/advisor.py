@@ -85,7 +85,9 @@ def _process_advisor(advisor: Advisor, now: datetime) -> str:
         )
         return f"error: slack history unreadable: {e}"
 
-    posting, reason = should_post(last_post, now, interval_days)
+    posting, reason = should_post(
+        last_post, now, interval_days, advisor.get("post_weekday")
+    )
     logger.info("Posting decision for %s: %s (%s)", advisor_id, posting, reason)
     if not posting:
         return f"skipped: {reason}"
@@ -109,8 +111,10 @@ def _process_advisor(advisor: Advisor, now: datetime) -> str:
     history = get_judgment_history(advisor_id, limit=HISTORY_LIMIT)
     product_names = {p["isin"]: p["name"] for p in products}
     performance_rows = build_performance(history, current_navs, product_names)
+    # The oldest of the series, not the newest: one fresh product must not
+    # mask a stale one, which is the whole point of showing the date.
     performance_text = format_performance_summary(
-        performance_rows, as_of=max(nav_dates) if nav_dates else None
+        performance_rows, as_of=min(nav_dates) if nav_dates else None
     )
     previous_codes = latest_judgment_by_isin(history)
     previous_labels = {
@@ -131,13 +135,23 @@ def _process_advisor(advisor: Advisor, now: datetime) -> str:
 
     # The prompt demands one judgment per product, but a silent omission would
     # otherwise cost that product its reply and its history row unnoticed.
-    missing = {p["isin"] for p in products} - {a.isin for a in advice.advices}
-    if missing:
+    wanted = {p["isin"] for p in products}
+    judged = {a.isin for a in advice.advices}
+    if missing := wanted - judged:
         logger.warning(
             "Advice for %s omitted %d product(s): %s",
             advisor_id,
             len(missing),
             ", ".join(sorted(missing)),
+        )
+    # An invented ISIN still gets a reply headed with the raw code and a
+    # history row scored at nav 0, so it should not pass unnoticed either.
+    if unexpected := judged - wanted:
+        logger.warning(
+            "Advice for %s judged %d unregistered product(s): %s",
+            advisor_id,
+            len(unexpected),
+            ", ".join(sorted(unexpected)),
         )
 
     parent_text = (

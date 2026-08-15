@@ -1,12 +1,13 @@
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, TypedDict, cast
+from typing import Any, NotRequired, TypedDict, cast
 
 import boto3
 from boto3.dynamodb.conditions import Key
 
 from src import config
+from src.slack_notifier import HEADER_LIMIT
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,9 @@ class Advisor(TypedDict):
     # Headline header; doubles as the marker used to find the previous post.
     title: str
     interval_days: int
+    # Target JST weekday, Monday=0 … Sunday=6. When set it sets the cadence
+    # and interval_days is not consulted; absent means interval_days governs.
+    post_weekday: NotRequired[int]
     products: list[Product]
     news_feeds: list[NewsFeed]
     # Free text describing the scheme's trading characteristics; injected
@@ -76,6 +80,8 @@ def _get_judgments_table() -> Any:
 def _normalize_advisor(raw: dict[str, Any]) -> Advisor:
     """Coerce DynamoDB Decimals back to int and fill in defaults."""
     raw["interval_days"] = int(raw.get("interval_days", DEFAULT_INTERVAL_DAYS))
+    if raw.get("post_weekday") is not None:
+        raw["post_weekday"] = int(raw["post_weekday"])
     return cast(Advisor, raw)
 
 
@@ -107,6 +113,7 @@ def add_advisor(
     news_feeds: list[NewsFeed],
     trading_notes: str,
     interval_days: int = DEFAULT_INTERVAL_DAYS,
+    post_weekday: int | None = None,
 ) -> None:
     """Full upsert of one advisor definition, preserving ``inserted_at``.
 
@@ -114,15 +121,17 @@ def add_advisor(
         ValueError: if another advisor already posts ``title`` to
             ``channel_id``. The pair is the idempotency marker the advisor
             looks for in Slack history, so a duplicate would make one of the
-            two match the other's post and skip forever.
+            two match the other's post and skip forever. Comparison is on the
+            truncated title, because that is what actually reaches Slack.
     """
+    marker = title[:HEADER_LIMIT]
     clash = next(
         (
             a
             for a in get_all_advisors()
             if a["advisor_id"] != advisor_id
             and a["channel_id"] == channel_id
-            and a["title"] == title
+            and a["title"][:HEADER_LIMIT] == marker
         ),
         None,
     )
@@ -136,19 +145,20 @@ def add_advisor(
     now = datetime.now(UTC).isoformat()
     existing = table.get_item(Key={"advisor_id": advisor_id}).get("Item")
     inserted_at = existing["inserted_at"] if existing else now
-    table.put_item(
-        Item={
-            "advisor_id": advisor_id,
-            "channel_id": channel_id,
-            "title": title,
-            "interval_days": interval_days,
-            "products": cast(Any, products),
-            "news_feeds": cast(Any, news_feeds),
-            "trading_notes": trading_notes,
-            "inserted_at": inserted_at,
-            "updated_at": now,
-        }
-    )
+    item: dict[str, Any] = {
+        "advisor_id": advisor_id,
+        "channel_id": channel_id,
+        "title": title,
+        "interval_days": interval_days,
+        "products": cast(Any, products),
+        "news_feeds": cast(Any, news_feeds),
+        "trading_notes": trading_notes,
+        "inserted_at": inserted_at,
+        "updated_at": now,
+    }
+    if post_weekday is not None:
+        item["post_weekday"] = post_weekday
+    table.put_item(Item=cast(Any, item))
 
 
 def delete_advisor(advisor_id: str) -> None:
