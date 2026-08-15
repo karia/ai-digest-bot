@@ -1,3 +1,4 @@
+import html
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -9,7 +10,20 @@ from src.slack_notifier import HEADER_LIMIT
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_LOOKBACK_DAYS = 30
+
 _bot_user_id_cache: str | None = None
+
+
+def lookback_days_for(interval_days: int) -> int:
+    """How far back to search for the previous post at this posting interval.
+
+    A fixed 30-day window silently caps any interval longer than it: the
+    previous post ages out, no match is found, and the advisor posts again
+    off-cadence. Searching twice the interval keeps at least one prior post
+    inside the window.
+    """
+    return max(DEFAULT_LOOKBACK_DAYS, interval_days * 2)
 
 
 def _get_bot_user_id(client: WebClient) -> str:
@@ -29,16 +43,21 @@ def _has_header(message: dict[str, Any], header: str) -> bool:
     ``header`` is set, and its comparison is truncated-to-truncated on both
     sides). The ``text`` fallback only matters for messages without a
     header block, where ``text`` holds the raw body instead.
+
+    Both sides are HTML-unescaped before comparing: Slack stores ``&``, ``<``
+    and ``>`` escaped and hands them back that way, so a title containing one
+    would never match its own post and the advisor would repost every run.
     """
-    truncated = header[:HEADER_LIMIT]
+    truncated = html.unescape(header[:HEADER_LIMIT])
     for block in message.get("blocks") or []:
         if block.get("type") == "header":
-            return str(block.get("text", {}).get("text", "")) == truncated
-    return str(message.get("text", "")) == truncated
+            found = str(block.get("text", {}).get("text", ""))
+            return html.unescape(found) == truncated
+    return html.unescape(str(message.get("text", ""))) == truncated
 
 
 def find_last_post_time(
-    channel: str, header: str, lookback_days: int = 30
+    channel: str, header: str, lookback_days: int = DEFAULT_LOOKBACK_DAYS
 ) -> datetime | None:
     """Find when this bot last posted a thread parent with ``header``.
 

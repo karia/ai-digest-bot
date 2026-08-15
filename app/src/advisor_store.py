@@ -108,7 +108,30 @@ def add_advisor(
     trading_notes: str,
     interval_days: int = DEFAULT_INTERVAL_DAYS,
 ) -> None:
-    """Full upsert of one advisor definition, preserving ``inserted_at``."""
+    """Full upsert of one advisor definition, preserving ``inserted_at``.
+
+    Raises:
+        ValueError: if another advisor already posts ``title`` to
+            ``channel_id``. The pair is the idempotency marker the advisor
+            looks for in Slack history, so a duplicate would make one of the
+            two match the other's post and skip forever.
+    """
+    clash = next(
+        (
+            a
+            for a in get_all_advisors()
+            if a["advisor_id"] != advisor_id
+            and a["channel_id"] == channel_id
+            and a["title"] == title
+        ),
+        None,
+    )
+    if clash is not None:
+        raise ValueError(
+            f"advisor {clash['advisor_id']!r} already posts {title!r}"
+            f" to {channel_id}; titles must be unique per channel"
+        )
+
     table = _get_advisors_table()
     now = datetime.now(UTC).isoformat()
     existing = table.get_item(Key={"advisor_id": advisor_id}).get("Item")

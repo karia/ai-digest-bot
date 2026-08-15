@@ -232,6 +232,10 @@ advisor は `channels:history`（または `groups:history`）で bot 自身の�
 
 **digest と advisor は必ず別チャンネルに投稿してください。** digest の `slack_last_bot_post` はヘッダーを見ずに bot の直前の投稿を探すため、advisor と同一チャンネルに同居させると advisor のスレッドを拾ってしまい、digest の対象期間計算が狂います（advisor 側は `title` でヘッダーフィルタしているため、この問題の影響は受けません）。詳細は [ADR 0001 の Consequences](docs/adr/0001-ideco-investment-advisor.md) を参照してください。
 
+**`TITLE` は表示用ヘッダーであると同時に冪等性の目印です。** advisor は「自分の `title` をヘッダーに持つ過去の投稿」を探して投稿済みかを判定するため、`TITLE` を変更すると過去の投稿が見つからなくなり、`interval_days` を待たずにその場で投稿します。誤字修正などで変更するときは、次回投稿が前倒しで発火することを織り込んでください。
+
+同じ理由から、**同一チャンネルに同じ `TITLE` のアドバイザーを2つ登録することはできません**（`make advisors-add` が拒否します）。登録できてしまうと、片方がもう片方の投稿を自分のものと誤認し、永久に skip し続けます。チャンネルが違えば同じ `TITLE` を使えます。
+
 ## How to Contribute
 
 ### ローカル開発環境のセットアップ

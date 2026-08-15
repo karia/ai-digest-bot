@@ -71,16 +71,29 @@ def build_performance(
     return rows
 
 
-def format_performance_summary(rows: list[PerformanceRow]) -> str:
-    """Render performance rows as Slack mrkdwn bullets."""
+def format_performance_summary(
+    rows: list[PerformanceRow], as_of: date | None = None
+) -> str:
+    """Render performance rows as Slack mrkdwn bullets.
+
+    Args:
+        rows: Scored judgments, newest first.
+        as_of: Date of the NAVs the rows were scored against. Shown so a
+            stale series (a delisted fund, an endpoint that stopped
+            updating) is visible instead of silently scoring against an old
+            price.
+    """
     if not rows:
         return NO_HISTORY_TEXT
-    return "\n".join(
+    bullets = "\n".join(
         f"• {row.run_date} {row.name}:"
         f" {JUDGMENT_LABELS.get(row.judgment, row.judgment)}"
         f" → {format_pct(row.change_pct)}"
         for row in rows
     )
+    if as_of is None:
+        return bullets
+    return f"（基準価額 {as_of:%Y-%m-%d} 時点）\n{bullets}"
 
 
 def latest_judgment_by_isin(history: list[JudgmentRecord]) -> dict[str, str]:

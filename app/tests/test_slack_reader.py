@@ -179,3 +179,30 @@ def test_should_post_compares_jst_dates_not_elapsed_hours():
     ok, _ = should_post(last, now, 1)
 
     assert ok is True
+
+
+def test_lookback_days_for_keeps_the_default_floor():
+    from src.slack_reader import lookback_days_for
+
+    assert lookback_days_for(7) == 30
+    assert lookback_days_for(14) == 30
+
+
+def test_lookback_days_for_grows_with_a_long_interval():
+    """A 30-day window would age out the previous post and repost off-cadence."""
+    from src.slack_reader import lookback_days_for
+
+    assert lookback_days_for(45) == 90
+    assert lookback_days_for(60) == 120
+
+
+def test_find_last_post_time_matches_a_header_slack_html_escaped(ssm_parameter):
+    """Slack stores & < > escaped; an exact compare would never match."""
+    from src.slack_reader import find_last_post_time
+
+    header = "S&P500 <重要> 投資判断"
+    posted = datetime(2026, 7, 18, 8, 0, tzinfo=UTC)
+    escaped = _message(posted, "S&amp;P500 &lt;重要&gt; 投資判断")
+
+    with patch("src.slack_reader.WebClient", return_value=_client([escaped])):
+        assert find_last_post_time("C1", header) == posted

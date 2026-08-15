@@ -263,3 +263,73 @@ def test_continues_to_the_next_advisor_when_one_raises_unexpectedly(
     # The advisor after the one that raised is still processed and succeeds.
     assert result["results"]["ideco-rakuten"] == "success"
     assert mock_put.call_count == 2
+
+
+def test_derives_the_slack_lookback_from_interval_days(integrated_aws_mock):
+    """A fixed 30-day window would age out the previous post at long intervals."""
+    from src.advisor import run_advisor_job
+    from src.advisor_store import add_advisor, get_all_advisors
+
+    existing = next(a for a in get_all_advisors() if a["advisor_id"] == "ideco-sbi")
+    add_advisor(
+        advisor_id="ideco-sbi",
+        channel_id=existing["channel_id"],
+        title=existing["title"],
+        products=existing["products"],
+        news_feeds=existing["news_feeds"],
+        trading_notes=existing["trading_notes"],
+        interval_days=60,
+    )
+
+    with (
+        patch("src.advisor.find_last_post_time", return_value=None) as mock_find,
+        patch("src.advisor.fetch_nav_series", return_value=SERIES),
+        patch("src.advisor.run_advice", return_value=_advice()),
+        patch("src.advisor.slack_notifier.post_message", return_value="t"),
+    ):
+        run_advisor_job(NOW)
+
+    assert mock_find.call_args.kwargs["lookback_days"] == 120
+
+
+def test_warns_when_the_agent_omits_a_product(integrated_aws_mock, caplog):
+    from src.advisor import run_advisor_job
+    from src.agent import AdviceResult
+
+    with (
+        patch("src.advisor.find_last_post_time", return_value=None),
+        patch("src.advisor.fetch_nav_series", return_value=SERIES),
+        patch(
+            "src.advisor.run_advice",
+            return_value=AdviceResult(summary="s", advices=[]),
+        ),
+        patch("src.advisor.slack_notifier.post_message", return_value="t"),
+    ):
+        with caplog.at_level("WARNING"):
+            result = run_advisor_job(NOW)
+
+    assert result["results"]["ideco-sbi"] == "success"
+    assert "omitted 1 product(s)" in caplog.text
+    assert ISIN in caplog.text
+
+
+def test_parent_message_states_the_nav_as_of_date(integrated_aws_mock):
+    from src.advisor import run_advisor_job
+    from src.advisor_store import put_judgments
+
+    put_judgments(
+        "ideco-sbi",
+        "2026-07-11",
+        [{"isin": ISIN, "judgment": "BUY", "reason": "r", "nav": 37000}],
+    )
+
+    with (
+        patch("src.advisor.find_last_post_time", return_value=None),
+        patch("src.advisor.fetch_nav_series", return_value=SERIES),
+        patch("src.advisor.run_advice", return_value=_advice()),
+        patch("src.advisor.slack_notifier.post_message", return_value="t") as mock_post,
+    ):
+        run_advisor_job(NOW)
+
+    # SERIES ends 2026-07-24, so that is the date the performance is scored at.
+    assert "（基準価額 2026-07-24 時点）" in mock_post.call_args_list[0].kwargs["text"]
