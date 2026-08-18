@@ -15,6 +15,6 @@ variable "bedrock_model_ids" {
   type        = list(string)
   default = [
     "global.anthropic.claude-sonnet-5",
-    "global.anthropic.claude-fable-5",
+    "global.anthropic.claude-opus-5",
   ]
 }

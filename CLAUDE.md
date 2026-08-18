@@ -11,10 +11,10 @@ Bedrock 上の Strands Agent を使って Slack に日本語で情報配信す�
 
 ## モデルの使い分け
 
-Bedrock のモデルは用途で 2 つに分かれる。どちらも `global.` 推論プロファイル。Sonnet 5 と Fable 5 には `jp.` プロファイルが無いため（`jp.` 自体は sonnet-4-6 や opus-4-8 に存在する）、推論は日本国内に限定されない。この所在地の変更を許容したうえでの選択である。
+Bedrock のモデルは用途で 2 つに分かれる。どちらも `global.` 推論プロファイル。Sonnet 5 と Opus 5 には `jp.` プロファイルが無いため（`jp.` 自体は sonnet-4-6 や opus-4-8 に存在する）、推論は日本国内に限定されない。この所在地の変更を許容したうえでの選択である。
 
 - `BEDROCK_MODEL_ID`（既定 `global.anthropic.claude-sonnet-5`）— digest 系 4 関数（`run_plan` / `run_digest` / `run_daily_digests` / `run_headline`）。取得済みテキストの要約が主で、軽量モデルで足りる
-- `BEDROCK_ADVICE_MODEL_ID`（既定 `global.anthropic.claude-fable-5`）— `run_advice` のみ。BUY/SELL/HOLD の投資判断は推論の重さが利くため上位モデルを使う
+- `BEDROCK_ADVICE_MODEL_ID`（既定 `global.anthropic.claude-opus-5`）— `run_advice` のみ。BUY/SELL/HOLD の投資判断は推論の重さが利くため上位モデルを使う
 
 モデルを増やす・変えるときは `terraform/variables.tf` の `bedrock_model_ids` にも足すこと。IAM はこのリストからプロファイルと foundation model の ARN を生成するため、片方だけ変えると実行時に AccessDenied になる。
 
