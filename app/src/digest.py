@@ -8,6 +8,16 @@ from src.store import get_all_sources
 
 logger = logging.getLogger(__name__)
 
+# Slack へ載せる例外文字列の上限。Bedrock の AccessDenied は 400 字近くあり、
+# 原因の判別には先頭だけで足りる。
+ERROR_EXCERPT_LIMIT = 300
+
+
+def _failure_body(failures: list[tuple[str, str]]) -> str:
+    lines = ["ダイジェストの生成に失敗しました。"]
+    lines += [f"・{name}: {msg[:ERROR_EXCERPT_LIMIT]}" for name, msg in failures]
+    return "\n".join(lines)
+
 
 def run_digest_job(until: datetime) -> dict[str, Any]:
     """Run the tech-blog digest job for every registered source.
@@ -52,6 +62,7 @@ def run_digest_job(until: datetime) -> dict[str, Any]:
         # Generate every digest first: the headline must summarize the whole
         # thread, so nothing is posted until all bodies are ready.
         digests: list[tuple[str, str, str]] = []  # (url, reply header, body)
+        failures: list[tuple[str, str]] = []  # (item name, error message)
         for item in items:
             url = item["url"]
             name = item["name"]
@@ -78,16 +89,27 @@ def run_digest_job(until: datetime) -> dict[str, Any]:
             except Exception as e:
                 logger.error("Failed for %s: %s", url, e, exc_info=True)
                 results[url] = f"error: {e}"
+                failures.append((name, str(e)))
 
-        try:
-            headline_body = run_headline(
-                [(h, body) for _, h, body in digests], since=since, until=until
-            )
-        except Exception as e:
+        if not digests and failures:
+            # 本文なしで投稿すると Slack 上は正常な回と見分けが付かず、障害が
+            # 何日も気付かれないまま続く。
             logger.error(
-                "Headline generation failed for %s: %s", title, e, exc_info=True
+                "ダイジェストを生成できませんでした: %s (%d 件失敗)",
+                title,
+                len(failures),
             )
-            headline_body = ""
+            headline_body = _failure_body(failures)
+        else:
+            try:
+                headline_body = run_headline(
+                    [(h, body) for _, h, body in digests], since=since, until=until
+                )
+            except Exception as e:
+                logger.error(
+                    "Headline generation failed for %s: %s", title, e, exc_info=True
+                )
+                headline_body = ""
 
         logger.info("Posting headline for source %s to %s", title, channel)
         try:
