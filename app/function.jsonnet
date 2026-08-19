@@ -27,7 +27,7 @@ local env = std.native('env');
       JUDGMENTS_TABLE_NAME: must_env('JUDGMENTS_TABLE_NAME'),
       SLACK_BOT_TOKEN_PARAM: must_env('SLACK_BOT_TOKEN_PARAM'),
       BEDROCK_MODEL_ID: env('BEDROCK_MODEL_ID', 'global.anthropic.claude-sonnet-5'),
-      BEDROCK_ADVICE_MODEL_ID: env('BEDROCK_ADVICE_MODEL_ID', 'global.anthropic.claude-fable-5'),
+      BEDROCK_ADVICE_MODEL_ID: env('BEDROCK_ADVICE_MODEL_ID', 'global.anthropic.claude-opus-5'),
       LOG_LEVEL: env('LOG_LEVEL', 'INFO'),
     },
   },
