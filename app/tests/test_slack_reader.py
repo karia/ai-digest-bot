@@ -63,7 +63,7 @@ def test_find_last_post_time_ignores_other_headers(ssm_parameter):
     """A digest thread in the same channel must not count as our post."""
     from src.slack_reader import find_last_post_time
 
-    messages = [_message(datetime(2026, 7, 20, 0, 0, tzinfo=UTC), "Tech Digest")]
+    messages = [_message(_ago(3), "Tech Digest")]
 
     with patch("src.slack_reader.WebClient", return_value=_client(messages)):
         assert find_last_post_time("C1", HEADER) is None
@@ -83,7 +83,7 @@ def test_find_last_post_time_returns_the_newest_match(ssm_parameter):
 def test_find_last_post_time_ignores_other_users(ssm_parameter):
     from src.slack_reader import find_last_post_time
 
-    messages = [_message(datetime(2026, 7, 18, tzinfo=UTC), HEADER, user="U_HUMAN")]
+    messages = [_message(_ago(3), HEADER, user="U_HUMAN")]
 
     with patch("src.slack_reader.WebClient", return_value=_client(messages)):
         assert find_last_post_time("C1", HEADER) is None
