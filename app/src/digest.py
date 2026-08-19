@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -7,6 +8,29 @@ from src.agent import run_daily_digests, run_digest, run_headline, run_plan
 from src.store import get_all_sources
 
 logger = logging.getLogger(__name__)
+
+# Slack へ載せる例外文字列の上限。Bedrock の AccessDenied は 400 字近くあり、
+# 原因の判別には先頭だけで足りる。
+ERROR_EXCERPT_LIMIT = 300
+
+# IAM 由来の例外は呼び出し元 ARN を含み、AWS アカウント ID がそのまま Slack に出る。
+_ACCOUNT_ID = re.compile(r"\d{12}")
+
+NO_ARTICLES_BODY = "対象期間に新着はありませんでした。"
+
+
+def _sanitize(message: str) -> str:
+    return _ACCOUNT_ID.sub("*" * 12, " ".join(message.split()))[:ERROR_EXCERPT_LIMIT]
+
+
+def _failure_body(failures: list[tuple[str, str]]) -> str:
+    # 同一原因で全 item が落ちるのが典型なので、同じ文面はまとめる。
+    grouped: dict[str, list[str]] = {}
+    for name, message in failures:
+        grouped.setdefault(_sanitize(message), []).append(name)
+    lines = ["ダイジェストの生成に失敗しました。"]
+    lines += [f"・{'、'.join(names)}: {msg}" for msg, names in grouped.items()]
+    return "\n".join(lines)
 
 
 def run_digest_job(until: datetime) -> dict[str, Any]:
@@ -52,6 +76,7 @@ def run_digest_job(until: datetime) -> dict[str, Any]:
         # Generate every digest first: the headline must summarize the whole
         # thread, so nothing is posted until all bodies are ready.
         digests: list[tuple[str, str, str]] = []  # (url, reply header, body)
+        failures: list[tuple[str, str]] = []  # (item name, error message)
         for item in items:
             url = item["url"]
             name = item["name"]
@@ -78,16 +103,32 @@ def run_digest_job(until: datetime) -> dict[str, Any]:
             except Exception as e:
                 logger.error("Failed for %s: %s", url, e, exc_info=True)
                 results[url] = f"error: {e}"
+                failures.append((name, str(e)))
 
-        try:
-            headline_body = run_headline(
-                [(h, body) for _, h, body in digests], since=since, until=until
-            )
-        except Exception as e:
-            logger.error(
-                "Headline generation failed for %s: %s", title, e, exc_info=True
-            )
-            headline_body = ""
+        if not digests:
+            # 本文なしで投稿すると Slack 上は正常な回と見分けが付かず、障害が
+            # 何日も気付かれないまま続く。生成すべき本文が無い回に run_headline
+            # を通すと、その失敗でまた空本文に戻ってしまう。
+            if failures:
+                logger.error(
+                    "ダイジェストを生成できませんでした: %s (%d 件失敗)",
+                    title,
+                    len(failures),
+                )
+                headline_body = _failure_body(failures)
+            else:
+                logger.info("No article to digest for %s", title)
+                headline_body = NO_ARTICLES_BODY
+        else:
+            try:
+                headline_body = run_headline(
+                    [(h, body) for _, h, body in digests], since=since, until=until
+                )
+            except Exception as e:
+                logger.error(
+                    "Headline generation failed for %s: %s", title, e, exc_info=True
+                )
+                headline_body = ""
 
         logger.info("Posting headline for source %s to %s", title, channel)
         try:

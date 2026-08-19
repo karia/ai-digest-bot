@@ -6,6 +6,16 @@ import pytest
 HEADER = "iDeCo 投資判断"
 
 
+def _ago(days: float) -> datetime:
+    """A post time inside the default 30-day lookback.
+
+    Absolute dates here rot: find_last_post_time drops anything older than
+    the window, so a fixed timestamp starts returning None once the suite
+    outlives it.
+    """
+    return datetime.now(UTC) - timedelta(days=days)
+
+
 def _message(ts: datetime, header: str | None, user: str = "U_BOT") -> dict:
     message: dict = {"ts": str(ts.timestamp()), "user": user}
     if header is not None:
@@ -39,7 +49,7 @@ def reset_bot_user_cache():
 def test_find_last_post_time_matches_the_advisor_header(ssm_parameter):
     from src.slack_reader import find_last_post_time
 
-    posted = datetime(2026, 7, 18, 8, 0, tzinfo=UTC)
+    posted = _ago(3)
 
     with patch(
         "src.slack_reader.WebClient", return_value=_client([_message(posted, HEADER)])
@@ -53,7 +63,7 @@ def test_find_last_post_time_ignores_other_headers(ssm_parameter):
     """A digest thread in the same channel must not count as our post."""
     from src.slack_reader import find_last_post_time
 
-    messages = [_message(datetime(2026, 7, 20, 0, 0, tzinfo=UTC), "Tech Digest")]
+    messages = [_message(_ago(3), "Tech Digest")]
 
     with patch("src.slack_reader.WebClient", return_value=_client(messages)):
         assert find_last_post_time("C1", HEADER) is None
@@ -62,8 +72,8 @@ def test_find_last_post_time_ignores_other_headers(ssm_parameter):
 def test_find_last_post_time_returns_the_newest_match(ssm_parameter):
     from src.slack_reader import find_last_post_time
 
-    newest = datetime(2026, 7, 18, 8, 0, tzinfo=UTC)
-    older = datetime(2026, 7, 11, 8, 0, tzinfo=UTC)
+    newest = _ago(3)
+    older = _ago(10)
     messages = [_message(newest, HEADER), _message(older, HEADER)]
 
     with patch("src.slack_reader.WebClient", return_value=_client(messages)):
@@ -73,7 +83,7 @@ def test_find_last_post_time_returns_the_newest_match(ssm_parameter):
 def test_find_last_post_time_ignores_other_users(ssm_parameter):
     from src.slack_reader import find_last_post_time
 
-    messages = [_message(datetime(2026, 7, 18, tzinfo=UTC), HEADER, user="U_HUMAN")]
+    messages = [_message(_ago(3), HEADER, user="U_HUMAN")]
 
     with patch("src.slack_reader.WebClient", return_value=_client(messages)):
         assert find_last_post_time("C1", HEADER) is None
@@ -94,7 +104,7 @@ def test_find_last_post_time_falls_back_to_the_text_field(ssm_parameter):
     """post_message sets text=header, so a block-less message still matches."""
     from src.slack_reader import find_last_post_time
 
-    posted = datetime(2026, 7, 18, 8, 0, tzinfo=UTC)
+    posted = _ago(3)
     message = {"ts": str(posted.timestamp()), "user": "U_BOT", "text": HEADER}
 
     with patch("src.slack_reader.WebClient", return_value=_client([message])):
@@ -201,7 +211,7 @@ def test_find_last_post_time_matches_a_header_slack_html_escaped(ssm_parameter):
     from src.slack_reader import find_last_post_time
 
     header = "S&P500 <重要> 投資判断"
-    posted = datetime(2026, 7, 18, 8, 0, tzinfo=UTC)
+    posted = _ago(3)
     escaped = _message(posted, "S&amp;P500 &lt;重要&gt; 投資判断")
 
     with patch("src.slack_reader.WebClient", return_value=_client([escaped])):
@@ -274,7 +284,7 @@ def test_find_last_post_time_matches_a_title_holding_a_literal_entity(ssm_parame
     from src.slack_reader import find_last_post_time
 
     header = "A &amp; B"
-    posted = datetime(2026, 7, 18, 8, 0, tzinfo=UTC)
+    posted = _ago(3)
 
     with patch(
         "src.slack_reader.WebClient",
