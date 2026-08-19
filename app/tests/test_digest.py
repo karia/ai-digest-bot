@@ -88,3 +88,81 @@ def test_partial_failure_still_posts_headline(posted):
         run_digest_job(UNTIL)
 
     assert [c["text"] for c in posted] == ["headline", "body"]
+
+
+ZERO_ARTICLE_SOURCE = {
+    "title": "Tech Digest",
+    "channel_id": "CTEST12345",
+    "items": [
+        {"url": "https://example.com/a.rss", "name": "Feed A", "split_by_day": True}
+    ],
+}
+
+
+def test_no_articles_is_not_reported_as_a_failure(posted):
+    from src.digest import run_digest_job
+
+    with (
+        patch("src.digest.get_all_sources", return_value=[ZERO_ARTICLE_SOURCE]),
+        patch("src.digest.run_plan", side_effect=RuntimeError("no plan")),
+        patch("src.digest.run_daily_digests", return_value=[]),
+        patch("src.digest.run_headline") as headline,
+    ):
+        run_digest_job(UNTIL)
+
+    assert len(posted) == 1
+    assert "失敗" not in posted[0]["text"]
+    assert "新着" in posted[0]["text"]
+    # 生成すべき本文が無い回に LLM を呼ぶ意味はなく、失敗すれば空本文に戻る。
+    headline.assert_not_called()
+
+
+def test_failure_body_masks_the_aws_account_id(posted):
+    from src.digest import run_digest_job
+
+    boom = RuntimeError(
+        "User: arn:aws:sts::123456789012:assumed-role/ai-digest-bot-lambda/x "
+        "is not authorized to perform: bedrock:InvokeModel"
+    )
+
+    with (
+        patch("src.digest.get_all_sources", return_value=[SOURCE]),
+        patch("src.digest.run_plan", side_effect=boom),
+        patch("src.digest.run_digest", side_effect=boom),
+    ):
+        run_digest_job(UNTIL)
+
+    assert "123456789012" not in posted[0]["text"]
+    assert "bedrock:InvokeModel" in posted[0]["text"]
+
+
+def test_failure_body_groups_items_sharing_one_error(posted):
+    from src.digest import run_digest_job
+
+    boom = RuntimeError("AccessDeniedException")
+
+    with (
+        patch("src.digest.get_all_sources", return_value=[SOURCE]),
+        patch("src.digest.run_plan", side_effect=boom),
+        patch("src.digest.run_digest", side_effect=boom),
+    ):
+        run_digest_job(UNTIL)
+
+    body = posted[0]["text"]
+    assert body.count("AccessDeniedException") == 1
+    assert "Feed A" in body and "Feed B" in body
+
+
+def test_failure_body_keeps_a_multiline_error_on_one_line(posted):
+    from src.digest import run_digest_job
+
+    boom = RuntimeError("first line\nsecond line")
+
+    with (
+        patch("src.digest.get_all_sources", return_value=[SOURCE]),
+        patch("src.digest.run_plan", side_effect=boom),
+        patch("src.digest.run_digest", side_effect=boom),
+    ):
+        run_digest_job(UNTIL)
+
+    assert "first line second line" in posted[0]["text"]

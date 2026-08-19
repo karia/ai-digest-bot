@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -12,10 +13,23 @@ logger = logging.getLogger(__name__)
 # 原因の判別には先頭だけで足りる。
 ERROR_EXCERPT_LIMIT = 300
 
+# IAM 由来の例外は呼び出し元 ARN を含み、AWS アカウント ID がそのまま Slack に出る。
+_ACCOUNT_ID = re.compile(r"\d{12}")
+
+NO_ARTICLES_BODY = "対象期間に新着はありませんでした。"
+
+
+def _sanitize(message: str) -> str:
+    return _ACCOUNT_ID.sub("*" * 12, " ".join(message.split()))[:ERROR_EXCERPT_LIMIT]
+
 
 def _failure_body(failures: list[tuple[str, str]]) -> str:
+    # 同一原因で全 item が落ちるのが典型なので、同じ文面はまとめる。
+    grouped: dict[str, list[str]] = {}
+    for name, message in failures:
+        grouped.setdefault(_sanitize(message), []).append(name)
     lines = ["ダイジェストの生成に失敗しました。"]
-    lines += [f"・{name}: {msg[:ERROR_EXCERPT_LIMIT]}" for name, msg in failures]
+    lines += [f"・{'、'.join(names)}: {msg}" for msg, names in grouped.items()]
     return "\n".join(lines)
 
 
@@ -91,15 +105,20 @@ def run_digest_job(until: datetime) -> dict[str, Any]:
                 results[url] = f"error: {e}"
                 failures.append((name, str(e)))
 
-        if not digests and failures:
+        if not digests:
             # 本文なしで投稿すると Slack 上は正常な回と見分けが付かず、障害が
-            # 何日も気付かれないまま続く。
-            logger.error(
-                "ダイジェストを生成できませんでした: %s (%d 件失敗)",
-                title,
-                len(failures),
-            )
-            headline_body = _failure_body(failures)
+            # 何日も気付かれないまま続く。生成すべき本文が無い回に run_headline
+            # を通すと、その失敗でまた空本文に戻ってしまう。
+            if failures:
+                logger.error(
+                    "ダイジェストを生成できませんでした: %s (%d 件失敗)",
+                    title,
+                    len(failures),
+                )
+                headline_body = _failure_body(failures)
+            else:
+                logger.info("No article to digest for %s", title)
+                headline_body = NO_ARTICLES_BODY
         else:
             try:
                 headline_body = run_headline(
