@@ -77,6 +77,7 @@ def test_post_message_splits_long_text_into_multiple_sections():
         ]
         assert len(sections) == 3
         assert all(len(s["text"]["text"]) <= 3000 for s in sections)
+        assert all(s["expand"] is True for s in sections)
 
 
 def test_post_message_truncates_header():
