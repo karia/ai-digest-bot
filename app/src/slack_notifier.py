@@ -14,7 +14,14 @@ HEADER_LIMIT = 150
 def _section_blocks(text: str) -> list[dict[str, Any]]:
     """Split text into mrkdwn section blocks under Slack's 3000-char limit."""
     chunks = [text[i : i + _SECTION_LIMIT] for i in range(0, len(text), _SECTION_LIMIT)]
-    return [{"type": "section", "text": {"type": "mrkdwn", "text": c}} for c in chunks]
+    return [
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": c},
+            "expand": True,
+        }
+        for c in chunks
+    ]
 
 
 def post_message(

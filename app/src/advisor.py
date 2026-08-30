@@ -29,8 +29,8 @@ DISCLAIMER = (
     "最終的な投資判断はご自身の責任で行ってください。"
 )
 
-# How many past runs to score and show. Roughly two months at weekly cadence.
-HISTORY_LIMIT = 8
+# Keep the performance summary concise while retaining the full history in DynamoDB.
+HISTORY_LIMIT = 2
 
 
 def _product_line(product: Product, nav_summary: str, previous: str | None) -> str:

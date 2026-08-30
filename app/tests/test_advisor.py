@@ -98,6 +98,21 @@ def test_posts_a_thread_when_due(integrated_aws_mock):
     assert "円安一服のため" in reply.kwargs["text"]
 
 
+def test_uses_only_two_recent_runs_for_performance(integrated_aws_mock):
+    from src.advisor import run_advisor_job
+
+    with (
+        patch("src.advisor.find_last_post_time", return_value=None),
+        patch("src.advisor.fetch_nav_series", return_value=SERIES),
+        patch("src.advisor.get_judgment_history", return_value=[]) as mock_history,
+        patch("src.advisor.run_advice", return_value=_advice()),
+        patch("src.advisor.slack_notifier.post_message", return_value="t"),
+    ):
+        run_advisor_job(NOW)
+
+    mock_history.assert_called_once_with("ideco-sbi", limit=2)
+
+
 def test_reply_states_the_change_from_the_previous_judgment(integrated_aws_mock):
     from src.advisor import run_advisor_job
     from src.advisor_store import put_judgments
