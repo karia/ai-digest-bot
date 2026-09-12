@@ -117,6 +117,9 @@ def dynamodb_table():
         dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
         table = _create_sources_table(dynamodb)
         table.put_item(Item=SAMPLE_SOURCE)
+        # Registering a source checks the advisors table for a header clash,
+        # so both tables exist here as they do in a deployed account.
+        _create_advisor_tables(dynamodb)
         yield table
 
 
@@ -161,4 +164,6 @@ def advisor_tables():
         dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
         advisors, judgments = _create_advisor_tables(dynamodb)
         advisors.put_item(Item=SAMPLE_ADVISOR)
+        # Registering an advisor checks the sources table for a header clash.
+        _create_sources_table(dynamodb)
         yield advisors, judgments
