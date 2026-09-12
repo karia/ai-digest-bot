@@ -65,12 +65,13 @@ def test_normal_run_posts_headline_and_replies(posted):
 
     with (
         patch("src.digest.get_all_sources", return_value=[SOURCE]),
-        patch("src.digest.run_plan", side_effect=RuntimeError("no plan")),
+        patch("src.digest.run_plan", side_effect=RuntimeError("no plan")) as run_plan,
         patch("src.digest.run_digest", return_value="body"),
         patch("src.digest.run_headline", return_value="headline"),
     ):
         run_digest_job(UNTIL)
 
+    run_plan.assert_called_once_with("CTEST12345", "Tech Digest", "毎日", UNTIL)
     assert [c["text"] for c in posted] == ["headline", "body", "body"]
     assert posted[0]["thread_ts"] is None
     assert all(c["thread_ts"] == "1234.5678" for c in posted[1:])

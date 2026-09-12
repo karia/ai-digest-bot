@@ -51,6 +51,18 @@ def add_source(
     items: list[SourceItem],
     posting_schedule: str = "毎日",
 ) -> None:
+    """Full upsert of one source definition, preserving ``inserted_at``.
+
+    Raises:
+        ValueError: if another source or advisor already posts ``title`` to
+            ``channel_id``. See ``headers.assert_header_available``.
+    """
+    # Imported here rather than at module scope: headers reads both stores, so
+    # a top-level import would close a cycle.
+    from src import headers
+
+    headers.assert_header_available(channel_id, title, source_title=title)
+
     table = _get_table()
     now = datetime.now(UTC).isoformat()
     existing = table.get_item(Key={"title": title}).get("Item")

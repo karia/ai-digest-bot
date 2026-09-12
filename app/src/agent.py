@@ -140,8 +140,9 @@ PLAN_SYSTEM_PROMPT = """\
 - スケジュールが解釈できない場合や判断に迷う場合は、投稿する（should_post=true）。
 
 # since の決定（should_post=true の場合のみ）
-- slack_last_bot_post で対象チャンネルにおけるbotの前回投稿時刻を取得し、
-  それをそのまま since とする。
+- slack_last_bot_post に対象チャンネルとヘッダーの両方を渡し、同じヘッダーを持つ
+  botの前回投稿時刻を取得して、それをそのまま since とする。
+- header には、入力で与えられたヘッダーを変更せずそのまま渡す。
 - 前回投稿が見つからない場合やエラーの場合は、現在時刻の24時間前を since とする。
 
 # 出力
@@ -223,12 +224,15 @@ class DailyDigests(BaseModel):
     days: list[DailyDigest]
 
 
-def run_plan(channel: str, posting_schedule: str, now: datetime) -> DigestPlan:
+def run_plan(
+    channel: str, title: str, posting_schedule: str, now: datetime
+) -> DigestPlan:
     """Decide whether to post today and the digest window start (since).
 
     The agent interprets the free-text posting schedule against the current
     JST date and, when posting, derives ``since`` from the bot's last post in
-    the channel (via the slack_last_bot_post tool; falls back to 24h ago).
+    the channel with the same header (via the slack_last_bot_post tool; falls
+    back to 24h ago).
     """
     model = BedrockModel(
         model_id=config.BEDROCK_MODEL_ID,
@@ -243,6 +247,7 @@ def run_plan(channel: str, posting_schedule: str, now: datetime) -> DigestPlan:
     now_jst = now.astimezone(config.JST)
     prompt = (
         f"チャンネルID: {channel}\n"
+        f"ヘッダー: {title}\n"
         f"投稿スケジュール: {posting_schedule}\n"
         f"現在日時: {now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}（UTC）"
         f" = {now_jst.strftime('%Y-%m-%d %H:%M')} JST（{now_jst.strftime('%A')}）\n"

@@ -7,7 +7,6 @@ import boto3
 from boto3.dynamodb.conditions import Key
 
 from src import config
-from src.slack_notifier import HEADER_LIMIT
 
 logger = logging.getLogger(__name__)
 
@@ -118,28 +117,14 @@ def add_advisor(
     """Full upsert of one advisor definition, preserving ``inserted_at``.
 
     Raises:
-        ValueError: if another advisor already posts ``title`` to
-            ``channel_id``. The pair is the idempotency marker the advisor
-            looks for in Slack history, so a duplicate would make one of the
-            two match the other's post and skip forever. Comparison is on the
-            truncated title, because that is what actually reaches Slack.
+        ValueError: if another advisor or source already posts ``title`` to
+            ``channel_id``. See ``headers.assert_header_available``.
     """
-    marker = title[:HEADER_LIMIT]
-    clash = next(
-        (
-            a
-            for a in get_all_advisors()
-            if a["advisor_id"] != advisor_id
-            and a["channel_id"] == channel_id
-            and a["title"][:HEADER_LIMIT] == marker
-        ),
-        None,
-    )
-    if clash is not None:
-        raise ValueError(
-            f"advisor {clash['advisor_id']!r} already posts {title!r}"
-            f" to {channel_id}; titles must be unique per channel"
-        )
+    # Imported here rather than at module scope: headers reads both stores, so
+    # a top-level import would close a cycle.
+    from src import headers
+
+    headers.assert_header_available(channel_id, title, advisor_id=advisor_id)
 
     table = _get_advisors_table()
     now = datetime.now(UTC).isoformat()

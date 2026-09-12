@@ -16,12 +16,21 @@ def reload_modules():
 
 
 def _create_sources_table(dynamodb):
-    return dynamodb.create_table(
+    table = dynamodb.create_table(
         TableName="test-sources",
         KeySchema=[{"AttributeName": "title", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "title", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
+    # Writing a source checks the advisors table for a header clash, so it has
+    # to exist here as it does in a deployed account.
+    dynamodb.create_table(
+        TableName="test-advisors",
+        KeySchema=[{"AttributeName": "advisor_id", "KeyType": "HASH"}],
+        AttributeDefinitions=[{"AttributeName": "advisor_id", "AttributeType": "S"}],
+        BillingMode="PAY_PER_REQUEST",
+    )
+    return table
 
 
 def _create_feeds_table(dynamodb, rows):

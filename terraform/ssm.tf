@@ -8,3 +8,13 @@ resource "aws_ssm_parameter" "slack_token" {
     ignore_changes = [value]
   }
 }
+
+resource "aws_ssm_parameter" "cost_channel_id" {
+  name  = "/${var.project_name}/cost-channel-id"
+  type  = "String"
+  value = "PLACEHOLDER"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}

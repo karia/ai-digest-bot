@@ -24,6 +24,8 @@ SAMPLE_RSS = """<?xml version="1.0"?>
 TABLE_NAME = "test-sources"
 SSM_PARAM = "/test/slack-bot-token"
 SLACK_TOKEN = "xoxb-test-token"
+COST_SSM_PARAM = "/test/cost-channel-id"
+COST_CHANNEL = "CCOST00001"
 
 ADVISORS_TABLE = "test-advisors"
 JUDGMENTS_TABLE = "test-advisor-judgments"
@@ -102,6 +104,7 @@ def env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AWS_REGION", "ap-northeast-1")
     monkeypatch.setenv("SOURCES_TABLE_NAME", TABLE_NAME)
     monkeypatch.setenv("SLACK_BOT_TOKEN_PARAM", SSM_PARAM)
+    monkeypatch.setenv("COST_CHANNEL_ID_PARAM", COST_SSM_PARAM)
     monkeypatch.setenv("BEDROCK_MODEL_ID", "global.anthropic.claude-sonnet-5")
     monkeypatch.setenv("BEDROCK_ADVICE_MODEL_ID", "global.anthropic.claude-opus-5")
     monkeypatch.setenv("ADVISORS_TABLE_NAME", ADVISORS_TABLE)
@@ -114,6 +117,9 @@ def dynamodb_table():
         dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
         table = _create_sources_table(dynamodb)
         table.put_item(Item=SAMPLE_SOURCE)
+        # Registering a source checks the advisors table for a header clash,
+        # so both tables exist here as they do in a deployed account.
+        _create_advisor_tables(dynamodb)
         yield table
 
 
@@ -126,6 +132,7 @@ def ssm_parameter():
             Value=SLACK_TOKEN,
             Type="SecureString",
         )
+        ssm.put_parameter(Name=COST_SSM_PARAM, Value=COST_CHANNEL, Type="String")
         yield ssm
 
 
@@ -142,6 +149,7 @@ def integrated_aws_mock():
             Value=SLACK_TOKEN,
             Type="SecureString",
         )
+        ssm.put_parameter(Name=COST_SSM_PARAM, Value=COST_CHANNEL, Type="String")
         yield
 
 
@@ -156,4 +164,6 @@ def advisor_tables():
         dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
         advisors, judgments = _create_advisor_tables(dynamodb)
         advisors.put_item(Item=SAMPLE_ADVISOR)
+        # Registering an advisor checks the sources table for a header clash.
+        _create_sources_table(dynamodb)
         yield advisors, judgments

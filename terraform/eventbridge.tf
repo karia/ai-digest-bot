@@ -47,6 +47,28 @@ resource "aws_scheduler_schedule" "daily_digest" {
   }
 }
 
+resource "aws_scheduler_schedule" "cost" {
+  name       = "${var.project_name}-cost"
+  group_name = "default"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  # JST 23:00 is an operational preference, not a correctness requirement:
+  # which day gets reported is decided in-app from SETTLING_MARGIN, so any
+  # hour works as long as the job runs once a day.
+  schedule_expression          = "cron(0 23 * * ? *)"
+  schedule_expression_timezone = "Asia/Tokyo"
+
+  target {
+    arn      = aws_lambda_function.main.arn
+    role_arn = aws_iam_role.scheduler.arn
+    # NOTE: do not use jsonencode() here; it breaks context attribute substitution.
+    input = "{\"job\": \"cost\", \"scheduled_time\": \"<aws.scheduler.scheduled-time>\"}"
+  }
+}
+
 resource "aws_scheduler_schedule" "advisor" {
   name       = "${var.project_name}-advisor"
   group_name = "default"
