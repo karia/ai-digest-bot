@@ -316,7 +316,10 @@ def test_handler_passes_schedule_to_plan(integrated_aws_mock, mock_run_plan):
         lambda_handler({"scheduled_time": "2026-06-01T00:00:00Z"}, None)
 
     mock_run_plan.assert_called_once_with(
-        "CTEST12345", "月曜と木曜", datetime.fromisoformat("2026-06-01T00:00:00Z")
+        "CTEST12345",
+        "Tech Digest",
+        "月曜と木曜",
+        datetime.fromisoformat("2026-06-01T00:00:00Z"),
     )
 
 
@@ -333,7 +336,7 @@ def test_handler_passes_default_schedule_when_field_missing(
     ):
         lambda_handler({"scheduled_time": "2026-06-01T00:00:00Z"}, None)
 
-    assert mock_run_plan.call_args[0][1] == "毎日"
+    assert mock_run_plan.call_args[0][2] == "毎日"
 
 
 def test_handler_splits_daily_item_into_one_reply_per_day(integrated_aws_mock):

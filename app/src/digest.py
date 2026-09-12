@@ -63,7 +63,9 @@ def run_digest_job(until: datetime) -> dict[str, Any]:
         # The plan agent interprets the free-text schedule and derives `since`
         # from the bot's last post in the channel (24h ago when unavailable).
         try:
-            plan = run_plan(channel, source.get("posting_schedule", "毎日"), until)
+            plan = run_plan(
+                channel, title, source.get("posting_schedule", "毎日"), until
+            )
         except Exception as e:
             logger.error("Plan failed for %s: %s", title, e, exc_info=True)
             plan = None

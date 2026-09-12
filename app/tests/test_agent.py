@@ -183,7 +183,7 @@ def test_run_plan_returns_structured_plan():
     plan = DigestPlan(should_post=True, since=SINCE, reason="毎日のため投稿")
     with patch("src.agent.Agent") as MockAgent:
         MockAgent.return_value.return_value = _mock_plan_result(plan)
-        result = run_plan("C123", "毎日", UNTIL)
+        result = run_plan("C123", "Tech Digest", "毎日", UNTIL)
 
     assert result is plan
 
@@ -195,10 +195,13 @@ def test_run_plan_passes_channel_schedule_and_time_to_agent():
     with patch("src.agent.Agent") as MockAgent:
         instance = MockAgent.return_value
         instance.return_value = _mock_plan_result(plan)
-        run_plan("C123", "月曜と木曜", UNTIL)
+        run_plan("C123", "Tech Digest", "月曜と木曜", UNTIL)
 
         prompt = instance.call_args[0][0]
         assert "C123" in prompt
+        # The header goes into the prompt so the tool can filter this bot's
+        # own posts down to this digest's thread parents.
+        assert "Tech Digest" in prompt
         assert "月曜と木曜" in prompt
         assert "2026-06-01T00:00:00Z" in prompt
         # 2026-06-01 00:00 UTC = 09:00 JST, a Monday
@@ -213,7 +216,7 @@ def test_run_plan_registers_only_the_slack_tool():
     plan = DigestPlan(should_post=True, since=None, reason="判定")
     with patch("src.agent.Agent") as MockAgent:
         MockAgent.return_value.return_value = _mock_plan_result(plan)
-        run_plan("C123", "毎日", UNTIL)
+        run_plan("C123", "Tech Digest", "毎日", UNTIL)
 
         tools = MockAgent.call_args.kwargs["tools"]
         assert len(tools) == 1
@@ -226,7 +229,7 @@ def test_run_plan_raises_without_structured_output():
     with patch("src.agent.Agent") as MockAgent:
         MockAgent.return_value.return_value = _mock_plan_result(None)
         with pytest.raises(ValueError):
-            run_plan("C123", "毎日", UNTIL)
+            run_plan("C123", "Tech Digest", "毎日", UNTIL)
 
 
 def test_run_advice_returns_the_structured_output():
