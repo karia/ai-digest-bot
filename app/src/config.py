@@ -6,19 +6,36 @@ import boto3
 # JST has no DST, so a fixed +9 offset is correct and avoids a tzdata dependency.
 JST = timezone(timedelta(hours=9))
 
-_slack_token_cache: str | None = None
+_ssm_cache: dict[str, str] = {}
+
+
+def _get_ssm_parameter(env_var: str) -> str:
+    """Read the SSM parameter whose name is held in ``env_var``.
+
+    Cached per module load so a warm Lambda invocation makes no extra call.
+
+    Args:
+        env_var: Environment variable holding the SSM parameter name.
+
+    Returns:
+        The parameter value, decrypted for SecureString parameters.
+    """
+    name = os.environ[env_var]
+    if name not in _ssm_cache:
+        ssm = boto3.client("ssm", region_name=AWS_REGION)
+        response = ssm.get_parameter(Name=name, WithDecryption=True)
+        _ssm_cache[name] = response["Parameter"]["Value"]
+    return _ssm_cache[name]
 
 
 def get_slack_token() -> str:
-    global _slack_token_cache
-    if _slack_token_cache is None:
-        ssm = boto3.client("ssm", region_name=AWS_REGION)
-        response = ssm.get_parameter(
-            Name=os.environ["SLACK_BOT_TOKEN_PARAM"],
-            WithDecryption=True,
-        )
-        _slack_token_cache = response["Parameter"]["Value"]
-    return _slack_token_cache
+    return _get_ssm_parameter("SLACK_BOT_TOKEN_PARAM")
+
+
+def get_cost_channel_id() -> str:
+    # Kept in SSM rather than the repo: this repository is public and a channel
+    # ID identifies a private workspace destination.
+    return _get_ssm_parameter("COST_CHANNEL_ID_PARAM")
 
 
 SOURCES_TABLE_NAME: str = os.environ["SOURCES_TABLE_NAME"]
