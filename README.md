@@ -199,7 +199,7 @@ aws dynamodb delete-table --table-name karia-ai-digest-bot-feeds
 
 ## コストレポート（cost）
 
-AWS アカウントの利用料金を Cost Explorer から取得し、当月累計・当月の着地見込み・前日のサービス別内訳を Slack へ投稿するジョブです。EventBridge（毎日 JST 8:00、`job: "cost"`）→ Lambda が起点。digest（9:00）より前に動かすのは、前日分のコストが Cost Explorer へ反映される時間を夜間に確保するためです。投稿は 1 メッセージで、スレッドは作りません。
+AWS アカウントの利用料金を Cost Explorer から取得し、当月累計・当月の着地見込み・前日のサービス別内訳を Slack へ投稿するジョブです。EventBridge（毎日 JST 23:00、`job: "cost"`）→ Lambda が起点。投稿は 1 メッセージで、スレッドは作りません。
 
 サービス別の行には、前日比と前月同日比の増減を並べます。日額が $0.01 未満のサービスは末尾の 1 行にまとめますが、判定は絶対値で行うため、返金やクレジットのようなマイナス計上は畳まれずに単独行として残ります。
 
@@ -224,6 +224,12 @@ Amazon DynamoDB                   $0.07  前日  +$0.01  前月同日  -$0.05
 aws ssm put-parameter --name /karia-ai-digest-bot/cost-channel-id \
   --value CXXXXXXXXXX --type String --overwrite
 ```
+
+### 対象日と起動時刻
+
+AWS の請求日は UTC 区切りで、Cost Explorer の日次バケットもそれに従います。レポートが扱う「前日」は、起動時点の UTC 日付の前日です。これは必ず閉じ切った日になります。JST 日付で数えると 9 時間早く繰り上がり、JST 9:00 まで開いている日を掴んでしまいます。
+
+起動を JST 23:00 に置いているのは、対象の UTC 日が閉じる JST 9:00 から 14 時間空けるためです。実測では締めから約 8 時間で値が確定します。朝や昼に動かすと、まだ積み上がっている最中の日の数字を読むことになります。
 
 ### Cost Explorer の課金と精度
 

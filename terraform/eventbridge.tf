@@ -55,8 +55,11 @@ resource "aws_scheduler_schedule" "cost" {
     mode = "OFF"
   }
 
-  # JST 08:00: stagger from the 09:00 digest and leave overnight time for the previous day's CE data to arrive.
-  schedule_expression          = "cron(0 8 * * ? *)"
+  # JST 23:00. AWS bills by UTC days, so the day being reported closes at
+  # 09:00 JST; running fourteen hours later leaves Cost Explorer time to
+  # settle it (observed: about eight hours). An earlier slot would report a
+  # day that is still accruing.
+  schedule_expression          = "cron(0 23 * * ? *)"
   schedule_expression_timezone = "Asia/Tokyo"
 
   target {

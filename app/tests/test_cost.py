@@ -188,9 +188,9 @@ def test_run_cost_job_reads_one_month_of_data_and_posts_to_the_cost_channel():
     client = FakeCostExplorer(
         pages=[
             [
-                _day("2026-08-11", [_group(S3, "0.91")]),
-                _day("2026-09-10", [_group(S3, "0.99")]),
-                _day("2026-09-11", [_group(S3, "1.01")]),
+                _day("2026-08-12", [_group(S3, "0.91")]),
+                _day("2026-09-11", [_group(S3, "0.99")]),
+                _day("2026-09-12", [_group(S3, "1.01")]),
             ]
         ]
     )
@@ -200,19 +200,43 @@ def test_run_cost_job_reads_one_month_of_data_and_posts_to_the_cost_channel():
         patch("src.cost.config.get_cost_channel_id", return_value="CCOST00001"),
         patch("src.cost.slack_notifier.post_message", return_value="1.2") as mock_post,
     ):
-        # JST 08:00 on 2026-09-12
-        result = cost.run_cost_job(datetime(2026, 9, 11, 23, 0, tzinfo=UTC))
+        # JST 23:00 on 2026-09-13, the scheduled hour.
+        result = cost.run_cost_job(datetime(2026, 9, 13, 14, 0, tzinfo=UTC))
 
-    assert result == {"status": "ok", "date": "2026-09-11"}
+    assert result == {"status": "ok", "date": "2026-09-12"}
     # One window wide enough for the previous month's same day covers every
     # comparison the report makes.
     assert client.usage_calls[0]["TimePeriod"] == {
-        "Start": "2026-08-11",
-        "End": "2026-09-13",
+        "Start": "2026-08-12",
+        "End": "2026-09-14",
     }
     assert len(client.usage_calls) == 1
+    assert len(client.forecast_calls) == 1
     assert mock_post.call_args[0][0] == "CCOST00001"
-    assert mock_post.call_args.kwargs["header"] == "AWS コスト 2026-09-12"
+    # The heading carries the reader's JST date, which matches UTC at this hour.
+    assert mock_post.call_args.kwargs["header"] == "AWS コスト 2026-09-13"
+
+
+def test_run_cost_job_targets_the_last_closed_utc_day_not_the_jst_one():
+    from src import cost
+
+    client = FakeCostExplorer(pages=[[_day("2026-09-11", [_group(S3, "1.01")])]])
+
+    with (
+        patch("src.cost.boto3.client", return_value=client),
+        patch("src.cost.config.get_cost_channel_id", return_value="CCOST00001"),
+        patch("src.cost.slack_notifier.post_message", return_value="1.2") as mock_post,
+    ):
+        # JST 08:00 on 2026-09-13 is 23:00 UTC on the 12th: the JST calendar
+        # already calls the 12th "yesterday" while that UTC day has an hour
+        # left to run, so billing for it is still landing.
+        result = cost.run_cost_job(datetime(2026, 9, 12, 23, 0, tzinfo=UTC))
+
+    # The 11th is the newest UTC day that has actually closed.
+    assert result == {"status": "ok", "date": "2026-09-11"}
+    assert client.usage_calls[0]["TimePeriod"]["End"] == "2026-09-13"
+    # The heading still follows the reader's JST date.
+    assert mock_post.call_args.kwargs["header"] == "AWS コスト 2026-09-13"
 
 
 def test_fetch_daily_costs_leaves_out_a_day_cost_explorer_has_not_filled_in():

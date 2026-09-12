@@ -1,6 +1,6 @@
 import calendar
 import logging
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
@@ -205,12 +205,16 @@ def run_cost_job(now: datetime) -> dict[str, Any]:
     """Post the daily AWS cost report to Slack.
 
     Args:
-        now: The scheduled invocation time; its JST date drives every window.
+        now: The scheduled invocation time.
 
     Returns:
         ``{"status": "ok", "date": "YYYY-MM-DD"}``.
     """
-    today = now.astimezone(config.JST).date()
+    # AWS bills by UTC days and Cost Explorer's daily buckets follow them, so
+    # every window below is UTC. Taking the day before the current UTC day is
+    # what guarantees the target has closed: the JST calendar rolls over nine
+    # hours early, and its "yesterday" is still open until 09:00 JST.
+    today = now.astimezone(UTC).date()
     target = today - timedelta(days=1)
     # One call covers every window the report needs: month-to-date, the last
     # two days, and the same day of the previous month.
@@ -227,7 +231,8 @@ def run_cost_job(now: datetime) -> dict[str, Any]:
     slack_notifier.post_message(
         channel,
         text=_build_report(costs, forecast, today),
-        header=f"AWS コスト {today:%Y-%m-%d}",
+        # The heading is the reader's own date, not the billing calendar's.
+        header=f"AWS コスト {now.astimezone(config.JST).date():%Y-%m-%d}",
     )
     logger.info("Cost report for %s posted to %s", target, channel)
     return {"status": "ok", "date": target.isoformat()}
