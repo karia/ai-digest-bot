@@ -27,7 +27,7 @@ def _day(day, groups):
 class FakeCostExplorer:
     """Minimal Cost Explorer stand-in that records the requests it receives."""
 
-    def __init__(self, pages, forecast="47.07"):
+    def __init__(self, pages, forecast="52.00"):
         self.pages = list(pages)
         self.forecast = forecast
         self.usage_calls = []
@@ -99,8 +99,8 @@ def test_fetch_daily_costs_asks_for_an_exclusive_end_and_follows_pages():
 def test_fetch_month_forecast_covers_the_whole_month_and_survives_a_refusal():
     from src import cost
 
-    client = FakeCostExplorer(pages=[[]], forecast="47.07")
-    assert cost._fetch_month_forecast(client, date(2026, 9, 12)) == Decimal("47.07")
+    client = FakeCostExplorer(pages=[[]], forecast="52.00")
+    assert cost._fetch_month_forecast(client, date(2026, 9, 12)) == Decimal("52.00")
     assert client.forecast_calls[0]["TimePeriod"] == {
         "Start": "2026-09-12",
         "End": "2026-10-01",
@@ -130,11 +130,11 @@ def _sample_costs():
 def test_build_report_shows_month_to_date_forecast_and_both_deltas():
     from src import cost
 
-    report = cost._build_report(_sample_costs(), Decimal("47.07"), date(2026, 9, 12))
+    report = cost._build_report(_sample_costs(), Decimal("52.00"), date(2026, 9, 12))
 
     # Month to date counts only days in the current month: 1.00 + 1.17 + 1.162
     assert "*当月累計* $3.33" in report
-    assert "*着地見込み* $47.07" in report
+    assert "*着地見込み* $52.00" in report
     # Target day total 1.162 vs 1.17 the day before and 0.914 a month earlier
     assert "*前日 09/11* $1.16" in report
     assert "前々日比 -$0.01" in report
@@ -174,7 +174,7 @@ def test_build_report_says_so_when_the_target_day_has_not_landed_yet():
 
     costs = {date(2026, 9, 1): {S3: Decimal("2.00")}}
 
-    report = cost._build_report(costs, Decimal("47.07"), date(2026, 9, 12))
+    report = cost._build_report(costs, Decimal("52.00"), date(2026, 9, 12))
 
     assert "*当月累計* $2.00" in report
     assert "09/11 分はまだ Cost Explorer に反映されていません。" in report

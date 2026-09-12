@@ -206,14 +206,14 @@ AWS アカウントの利用料金を Cost Explorer から取得し、当月累�
 ```
 AWS コスト 2026-09-12
 
-当月累計 $21.47  →  着地見込み $47.07
-前日 09/11 $1.71 (前々日比 -$0.49 / 前月同日比 +$0.26)
+当月累計 $18.84  →  着地見込み $52.00
+前日 09/11 $1.33 (前々日比 -$0.24 / 前月同日比 +$0.35)
 
-Amazon Simple Storage Service     $1.04  前日      ±0  前月同日  +$0.01
-Claude Opus 5 (Amazon Bedrock…    $0.41  前日  +$0.41  前月同日  +$0.41
-Claude Sonnet 5 (Amazon Bedro…    $0.24  前日  -$0.79  前月同日  +$0.24
-AWS Secrets Manager               $0.02  前日      ±0  前月同日  +$0.02
-他 8 サービス $0.00
+Amazon Simple Storage Service     $0.82  前日  +$0.03  前月同日  +$0.07
+Claude Sonnet 5 (Amazon Bedro…    $0.31  前日  -$0.28  前月同日  +$0.31
+AWS Lambda                        $0.12  前日      ±0  前月同日  +$0.02
+Amazon DynamoDB                   $0.07  前日  +$0.01  前月同日  -$0.05
+他 6 サービス $0.01
 ```
 
 ### 投稿先チャンネル
