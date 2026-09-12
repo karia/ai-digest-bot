@@ -55,10 +55,9 @@ resource "aws_scheduler_schedule" "cost" {
     mode = "OFF"
   }
 
-  # JST 23:00. AWS bills by UTC days, so the day being reported closes at
-  # 09:00 JST; running fourteen hours later leaves Cost Explorer time to
-  # settle it (observed: about eight hours). An earlier slot would report a
-  # day that is still accruing.
+  # JST 23:00 is an operational preference, not a correctness requirement:
+  # which day gets reported is decided in-app from SETTLING_MARGIN, so any
+  # hour works as long as the job runs once a day.
   schedule_expression          = "cron(0 23 * * ? *)"
   schedule_expression_timezone = "Asia/Tokyo"
 

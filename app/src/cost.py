@@ -21,6 +21,33 @@ NAME_WIDTH = 30
 
 _CENT = Decimal("0.01")
 
+# How long a UTC billing day is given to settle in Cost Explorer before the
+# report will quote it. AWS guarantees a refresh only once every 24 hours and
+# in practice refreshes about three times a day; a day measured here was final
+# roughly eight hours after it closed. Twelve hours clears that comfortably
+# without pushing the report a whole extra day behind.
+#
+# This margin, not the schedule, is what keeps a half-filled day out of the
+# report: the job stays correct whatever hour it is launched at, as long as it
+# runs once a day.
+SETTLING_MARGIN = timedelta(hours=12)
+
+PRELIMINARY_NOTE = (
+    "Cost Explorer の反映途中の値を含む速報値です。確定額は後から変動します。"
+)
+
+
+def _target_day(now: datetime) -> date:
+    """The newest UTC billing day that has had time to settle.
+
+    Args:
+        now: The invocation time, in any timezone.
+
+    Returns:
+        The last UTC day that closed at least ``SETTLING_MARGIN`` ago.
+    """
+    return (now.astimezone(UTC) - SETTLING_MARGIN).date() - timedelta(days=1)
+
 
 def _month_start(day: date) -> date:
     return day.replace(day=1)
@@ -165,7 +192,10 @@ def _service_table(
 
 
 def _build_report(
-    costs: dict[date, dict[str, Decimal]], forecast: Decimal | None, today: date
+    costs: dict[date, dict[str, Decimal]],
+    forecast: Decimal | None,
+    today: date,
+    target: date,
 ) -> str:
     month_to_date = sum(
         (
@@ -179,25 +209,25 @@ def _build_report(
     if forecast is not None:
         lines[0] += f"  →  *着地見込み* {_usd(forecast)}"
 
-    target = today - timedelta(days=1)
     target_total = _day_total(costs, target)
     if target_total is None:
-        # CE can lag a day. Saying so beats silently reporting the day before
-        # as if it were yesterday.
         lines.append(f"{target:%m/%d} 分はまだ Cost Explorer に反映されていません。")
+        lines.append(PRELIMINARY_NOTE)
         return "\n".join(lines)
 
     previous = target - timedelta(days=1)
     last_month = _same_day_last_month(target)
     lines.append(
-        f"*前日 {target:%m/%d}* {_usd(target_total)}"
-        f" (前々日比 {_delta(target_total, _day_total(costs, previous))}"
+        f"*{target:%m/%d} の利用* {_usd(target_total)}"
+        f" (前日比 {_delta(target_total, _day_total(costs, previous))}"
         f" / 前月同日比 {_delta(target_total, _day_total(costs, last_month))})"
     )
     table = _service_table(costs, target, previous, last_month)
     if table:
         lines.append("")
         lines.append(table)
+    lines.append("")
+    lines.append(PRELIMINARY_NOTE)
     return "\n".join(lines)
 
 
@@ -205,32 +235,38 @@ def run_cost_job(now: datetime) -> dict[str, Any]:
     """Post the daily AWS cost report to Slack.
 
     Args:
-        now: The scheduled invocation time.
+        now: The invocation time. Only the settling margin decides which day is
+            reported, so the schedule may sit at any hour.
 
     Returns:
         ``{"status": "ok", "date": "YYYY-MM-DD"}``.
     """
     # AWS bills by UTC days and Cost Explorer's daily buckets follow them, so
-    # every window below is UTC. Taking the day before the current UTC day is
-    # what guarantees the target has closed: the JST calendar rolls over nine
-    # hours early, and its "yesterday" is still open until 09:00 JST.
+    # every window below is UTC. The month figures track the current month,
+    # which is what a reader means by "当月"; the breakdown tracks the newest
+    # settled day, which may be more than one day back.
     today = now.astimezone(UTC).date()
-    target = today - timedelta(days=1)
-    # One call covers every window the report needs: month-to-date, the last
-    # two days, and the same day of the previous month.
+    target = _target_day(now)
+    # One call covers every window the report needs: month-to-date, the target
+    # day and the day before it, and the same day of the previous month.
     start = min(
         _same_day_last_month(target), target - timedelta(days=1), _month_start(today)
     )
 
     client = boto3.client("ce", region_name=config.AWS_REGION)
     costs = _fetch_daily_costs(client, start, today)
-    logger.info("Fetched %d day(s) of cost data from %s", len(costs), start)
+    logger.info(
+        "Fetched %d day(s) of cost data from %s; target day %s",
+        len(costs),
+        start,
+        target,
+    )
     forecast = _fetch_month_forecast(client, today)
 
     channel = config.get_cost_channel_id()
     slack_notifier.post_message(
         channel,
-        text=_build_report(costs, forecast, today),
+        text=_build_report(costs, forecast, today, target),
         # The heading is the reader's own date, not the billing calendar's.
         header=f"AWS コスト {now.astimezone(config.JST).date():%Y-%m-%d}",
     )

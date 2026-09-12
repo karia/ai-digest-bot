@@ -1,8 +1,10 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
+
+JST = timezone(timedelta(hours=9))
 
 S3 = "Amazon Simple Storage Service"
 SONNET = "Claude Sonnet 5 (Amazon Bedrock Edition)"
@@ -130,14 +132,16 @@ def _sample_costs():
 def test_build_report_shows_month_to_date_forecast_and_both_deltas():
     from src import cost
 
-    report = cost._build_report(_sample_costs(), Decimal("52.00"), date(2026, 9, 12))
+    report = cost._build_report(
+        _sample_costs(), Decimal("52.00"), date(2026, 9, 12), date(2026, 9, 11)
+    )
 
     # Month to date counts only days in the current month: 1.00 + 1.17 + 1.162
     assert "*当月累計* $3.33" in report
     assert "*着地見込み* $52.00" in report
     # Target day total 1.162 vs 1.17 the day before and 0.914 a month earlier
-    assert "*前日 09/11* $1.16" in report
-    assert "前々日比 -$0.01" in report
+    assert "*09/11 の利用* $1.16" in report
+    assert "前日比 -$0.01" in report
     assert "前月同日比 +$0.25" in report
     # S3 rose a cent day over day and a dime month over month
     assert "前日  +$0.02" in report
@@ -149,7 +153,9 @@ def test_build_report_shows_month_to_date_forecast_and_both_deltas():
 def test_build_report_folds_sub_cent_services_into_one_line():
     from src import cost
 
-    report = cost._build_report(_sample_costs(), None, date(2026, 9, 12))
+    report = cost._build_report(
+        _sample_costs(), None, date(2026, 9, 12), date(2026, 9, 11)
+    )
 
     assert GLUE not in report
     assert "他 1 サービス $0.00" in report
@@ -163,7 +169,7 @@ def test_build_report_marks_a_baseline_day_with_no_data_as_unknown():
     costs = _sample_costs()
     del costs[date(2026, 8, 11)]
 
-    report = cost._build_report(costs, None, date(2026, 9, 12))
+    report = cost._build_report(costs, None, date(2026, 9, 12), date(2026, 9, 11))
 
     assert "前月同日比 n/a" in report
     assert "前月同日     n/a" in report
@@ -174,12 +180,55 @@ def test_build_report_says_so_when_the_target_day_has_not_landed_yet():
 
     costs = {date(2026, 9, 1): {S3: Decimal("2.00")}}
 
-    report = cost._build_report(costs, Decimal("52.00"), date(2026, 9, 12))
+    report = cost._build_report(
+        costs, Decimal("52.00"), date(2026, 9, 12), date(2026, 9, 11)
+    )
 
     assert "*当月累計* $2.00" in report
     assert "09/11 分はまだ Cost Explorer に反映されていません。" in report
     # Without the day's data there is nothing to break down
     assert "```" not in report
+
+
+@pytest.mark.parametrize(
+    ("now", "expected_target"),
+    [
+        # 12h after the day closed: the earliest moment the margin allows it.
+        (datetime(2026, 9, 12, 12, 0, tzinfo=UTC), date(2026, 9, 11)),
+        # One minute earlier the margin is not met, so it drops back a day.
+        (datetime(2026, 9, 12, 11, 59, tzinfo=UTC), date(2026, 9, 10)),
+        # JST 23:00, the scheduled hour.
+        (datetime(2026, 9, 12, 14, 0, tzinfo=UTC), date(2026, 9, 11)),
+        # JST 08:00: the JST calendar already calls the 11th "yesterday" while
+        # that UTC day has an hour left to run.
+        (datetime(2026, 9, 11, 23, 0, tzinfo=UTC), date(2026, 9, 10)),
+        # Just past UTC midnight, when the day that closed is still landing.
+        (datetime(2026, 9, 12, 0, 30, tzinfo=UTC), date(2026, 9, 10)),
+        # A JST-expressed instant resolves through its UTC equivalent.
+        (datetime(2026, 9, 12, 23, 0, tzinfo=JST), date(2026, 9, 11)),
+    ],
+)
+def test_target_day_depends_on_the_settling_margin_not_the_launch_hour(
+    now, expected_target
+):
+    from src import cost
+
+    assert cost._target_day(now) == expected_target
+
+
+def test_target_day_is_always_a_day_that_closed_before_the_margin():
+    from src import cost
+
+    # Sweep a full day of launch hours: whatever the schedule, the reported
+    # day must have closed at least SETTLING_MARGIN ago.
+    for hour in range(24):
+        for minute in (0, 31):
+            now = datetime(2026, 3, 2, hour, minute, tzinfo=UTC)
+            target = cost._target_day(now)
+            closed_at = datetime(
+                target.year, target.month, target.day, tzinfo=UTC
+            ) + timedelta(days=1)
+            assert now - closed_at >= cost.SETTLING_MARGIN
 
 
 def test_run_cost_job_reads_one_month_of_data_and_posts_to_the_cost_channel():
@@ -188,9 +237,9 @@ def test_run_cost_job_reads_one_month_of_data_and_posts_to_the_cost_channel():
     client = FakeCostExplorer(
         pages=[
             [
-                _day("2026-08-12", [_group(S3, "0.91")]),
-                _day("2026-09-11", [_group(S3, "0.99")]),
-                _day("2026-09-12", [_group(S3, "1.01")]),
+                _day("2026-08-11", [_group(S3, "0.91")]),
+                _day("2026-09-10", [_group(S3, "0.99")]),
+                _day("2026-09-11", [_group(S3, "1.01")]),
             ]
         ]
     )
@@ -200,43 +249,46 @@ def test_run_cost_job_reads_one_month_of_data_and_posts_to_the_cost_channel():
         patch("src.cost.config.get_cost_channel_id", return_value="CCOST00001"),
         patch("src.cost.slack_notifier.post_message", return_value="1.2") as mock_post,
     ):
-        # JST 23:00 on 2026-09-13, the scheduled hour.
-        result = cost.run_cost_job(datetime(2026, 9, 13, 14, 0, tzinfo=UTC))
+        # JST 23:00 on 2026-09-12.
+        result = cost.run_cost_job(datetime(2026, 9, 12, 14, 0, tzinfo=UTC))
 
-    assert result == {"status": "ok", "date": "2026-09-12"}
-    # One window wide enough for the previous month's same day covers every
-    # comparison the report makes.
+    assert result == {"status": "ok", "date": "2026-09-11"}
     assert client.usage_calls[0]["TimePeriod"] == {
-        "Start": "2026-08-12",
-        "End": "2026-09-14",
+        "Start": "2026-08-11",
+        "End": "2026-09-13",
     }
     assert len(client.usage_calls) == 1
     assert len(client.forecast_calls) == 1
     assert mock_post.call_args[0][0] == "CCOST00001"
-    # The heading carries the reader's JST date, which matches UTC at this hour.
-    assert mock_post.call_args.kwargs["header"] == "AWS コスト 2026-09-13"
+    assert mock_post.call_args.kwargs["header"] == "AWS コスト 2026-09-12"
+    # Every figure is preliminary, and the message has to say so.
+    assert cost.PRELIMINARY_NOTE in mock_post.call_args.kwargs["text"]
 
 
-def test_run_cost_job_targets_the_last_closed_utc_day_not_the_jst_one():
+def test_run_cost_job_skips_a_day_that_has_not_settled_yet():
     from src import cost
 
-    client = FakeCostExplorer(pages=[[_day("2026-09-11", [_group(S3, "1.01")])]])
+    client = FakeCostExplorer(
+        pages=[
+            [
+                _day("2026-09-10", [_group(S3, "0.99")]),
+                # The 11th closed half an hour ago and has barely landed.
+                _day("2026-09-11", [_group(S3, "0.04")]),
+            ]
+        ]
+    )
 
     with (
         patch("src.cost.boto3.client", return_value=client),
         patch("src.cost.config.get_cost_channel_id", return_value="CCOST00001"),
         patch("src.cost.slack_notifier.post_message", return_value="1.2") as mock_post,
     ):
-        # JST 08:00 on 2026-09-13 is 23:00 UTC on the 12th: the JST calendar
-        # already calls the 12th "yesterday" while that UTC day has an hour
-        # left to run, so billing for it is still landing.
-        result = cost.run_cost_job(datetime(2026, 9, 12, 23, 0, tzinfo=UTC))
+        result = cost.run_cost_job(datetime(2026, 9, 12, 0, 30, tzinfo=UTC))
 
-    # The 11th is the newest UTC day that has actually closed.
-    assert result == {"status": "ok", "date": "2026-09-11"}
-    assert client.usage_calls[0]["TimePeriod"]["End"] == "2026-09-13"
-    # The heading still follows the reader's JST date.
-    assert mock_post.call_args.kwargs["header"] == "AWS コスト 2026-09-13"
+    # Quoting the 11th here would understate it by an order of magnitude.
+    assert result == {"status": "ok", "date": "2026-09-10"}
+    assert "09/10 の利用" in mock_post.call_args.kwargs["text"]
+    assert "$0.04" not in mock_post.call_args.kwargs["text"]
 
 
 def test_fetch_daily_costs_leaves_out_a_day_cost_explorer_has_not_filled_in():
@@ -267,7 +319,7 @@ def test_build_report_reports_an_empty_target_day_as_not_landed_yet():
     )
     costs = cost._fetch_daily_costs(client, date(2026, 9, 10), date(2026, 9, 11))
 
-    report = cost._build_report(costs, None, date(2026, 9, 12))
+    report = cost._build_report(costs, None, date(2026, 9, 12), date(2026, 9, 11))
 
     assert "09/11 分はまだ Cost Explorer に反映されていません。" in report
     assert "$0.00" not in report
@@ -286,7 +338,7 @@ def test_service_table_keeps_a_refund_out_of_the_folded_line():
         },
     }
 
-    report = cost._build_report(costs, None, date(2026, 9, 12))
+    report = cost._build_report(costs, None, date(2026, 9, 12), date(2026, 9, 11))
 
     assert "Refund" in report
     assert "-$10.00" in report
