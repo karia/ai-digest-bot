@@ -74,7 +74,7 @@ make invoke-cost            # 現在時刻を scheduled_time として本番 Lam
 advisor の実行フロー（`app/src/advisor.py:run_advisor_job`）:
 
 1. DynamoDB `advisors` テーブルを全件 scan（`advisor_store.get_all_advisors`）。主キーは `advisor_id`、各アイテムは `channel_id`、`title`（ヘッドライン兼投稿識別子）、`interval_days`、`products`（`{isin, name, category, holding, assoc_fund_cd}` の配列）、`news_feeds`（`{url, name}` の配列）、`trading_notes` を持つ。1 アイテム = 1 スレッド
-2. アドバイザーごとにループ（`_process_advisor`）。まず `slack_reader.find_last_post_time(channel, title)` で **`title` をヘッダーに持つ** bot の前回投稿時刻を検索（遡る日数は `interval_days` から導出。既定30日）。header でフィルタするため、同一チャンネルに digest や cost、他アドバイザーの投稿があっても混同しない（digest の `slack_last_bot_post` もこの関数に委譲しており、3 ジョブは同一チャンネルに同居できる。条件はヘッダーが重複しないこと）。読み取り自体が失敗した場合は「未投稿」とみなさず処理を中断する（誤って重複投稿するより安全側に倒す）
+2. アドバイザーごとにループ（`_process_advisor`）。まず `slack_reader.find_last_post_time(channel, title)` で **`title` をヘッダーに持つ** bot の前回投稿時刻を検索（遡る日数は `interval_days` から導出。既定30日）。header でフィルタするため、同一チャンネルに digest や cost、他アドバイザーの投稿があっても混同しない（digest の `slack_last_bot_post` もこの関数に委譲しており、3 ジョブは同一チャンネルに同居できる）。同居の前提であるヘッダーの一意性は `headers.assert_header_available` が登録時に検証し、`store.add_source` と `advisor_store.add_advisor` の両方が呼ぶ。テーブルを跨いで見るため、この関数は両ストアを import し、逆に両ストアからは関数内 import で呼ばれる。読み取り自体が失敗した場合は「未投稿」とみなさず処理を中断する（誤って重複投稿するより安全側に倒す）
 3. `slack_reader.should_post(last_post, now, interval_days)` で投稿可否を判定: 前回投稿が同日（JST）、または前回投稿から `interval_days` 日未満なら skip。`post_weekday`（JST の曜日、月=0）が設定されていればそちらが周期を決め、`interval_days` は参照しない。起動は毎日なので、目標曜日の実行が失敗しても翌日以降の実行が拾う。いずれの場合も同日複数回実行では投稿しない
 4. 投稿対象なら `products` ごとに `nav.fetch_nav_series(isin, assoc_fund_cd)` で投信協会 CSV から基準価額の時系列を取得し（失敗した商品は summary なしで続行）、`performance.summarize_nav` で直近の推移テキストを作る
 5. `advisor_store.get_judgment_history(advisor_id)` で過去の判断履歴（最大8件）を取得し、`performance.build_performance` で前回判断時点の基準価額に対する現在の騰落率を計算、`format_performance_summary` で成績サマリ文にする。`latest_judgment_by_isin` で商品ごとの前回判断も取り出す
@@ -86,20 +86,14 @@ digest と同様、**投稿は Python（`advisor.py`）がオーケストレー�
 
 cost の実行フロー（`app/src/cost.py:run_cost_job`）:
 
-1. **すべての期間計算は UTC で行う**。AWS の請求日は UTC 区切りで、Cost Explorer の DAILY バケットもそれに従うため。対象日は `_target_day` が決め、締めから `SETTLING_MARGIN`（12 時間）以上経過した最新の UTC 日を返す。**起動時刻に依存しない設計であり、cron を何時に置いても正しく動く**（単に「UTC 今日の前日」にすると、UTC 00:00〜12:00 に起動したとき締め直後のほぼ空の日を掴む。しかも値はゼロではないので未反映ガードも素通りする）。対象日・その前日・`前月同日`・`当月1日` の最も古い日を起点として範囲を決める。当月累計と着地見込みは対象日ではなく起動時点の当月を追う。Slack のヘッダーは読み手の JST 日付を使う。`GetCostAndUsage`（DAILY・SERVICE 別・UnblendedCost）を **1 回**呼び、当月累計・前日・前々日・前月同日をすべてこの 1 レスポンスから賄う。`NextPageToken` があるページは最後まで追う（1 ページ目で打ち切ると金額を過少報告するため）
-2. `GroupBy` 指定時は `Total` が空になるので、集計は `Groups` から行う。**グループ 0 件の日は辞書に登録しない**。Cost Explorer は未反映の日も「グループ 0 件」で返し、真のゼロと区別できないため、`$0.00` と断定するより未反映として扱う
+1. **すべての期間計算は UTC で行う**。AWS の請求日は UTC 区切りで、Cost Explorer の DAILY バケットもそれに従うため。対象日は `_target_day` が決め、締めから `SETTLING_MARGIN`（12 時間）以上経過した最新の UTC 日を返す。**起動時刻に依存しない設計であり、cron を何時に置いても正しく動く**（単に「UTC 今日の前日」にすると、UTC 00:00〜12:00 に起動したとき締め直後のほぼ空の日を掴む。しかも値はゼロではないので未反映ガードも素通りする）。対象日・その前日・`前月同日`・`当月1日` の最も古い日を起点として範囲を決める。当月累計と着地見込みは起動時点の当月を追う（読み手が「当月」と言うときに指すのはそちら）。Slack のヘッダーは読み手の JST 日付を使う。`GetCostAndUsage`（DAILY・SERVICE 別・UnblendedCost）を **1 回**呼び、当月累計・対象日・その前日・前月同日をすべてこの 1 レスポンスから賄う。`NextPageToken` があるページは最後まで追う（1 ページ目で打ち切ると金額を過少報告するため）
+2. `GroupBy` 指定時は `Total` が空になるので、集計は `Groups` から行う。**グループ 0 件の日は辞書に登録しない**。Cost Explorer は未反映の日も「グループ 0 件」で返し、真のゼロと区別できないため、金額をゼロと断定せず未反映として扱う
 3. `GetCostForecast`（MONTHLY・UNBLENDED_COST）を 1 回呼んで着地見込みを得る。月の途中を起点に指定しても API 側が期間を月全体へ正規化するため、返る `Total` は**その月の着地額**であり、当月累計へ加算しない。予測を出せないアカウントではエラーになるので、その場合は着地見込みの行を省いて続行する
 4. 金額は API の文字列から直接 `Decimal` へ変換し、計算中は丸めない。丸めるのは表示と差分表示のときだけ
-5. サービス別の行は日額 `$0.01` 以上のものを列挙し、残りを末尾 1 行にまとめる。判定は `abs()` で行うため、返金・クレジットのマイナス計上は畳まれずに残る
+5. サービス別の行は日額 USD 0.01 以上のものを列挙し、残りを末尾 1 行にまとめる。判定は `abs()` で行うため、返金・クレジットのマイナス計上は畳まれずに残る
 6. 投稿先チャンネルは SSM Parameter Store（`COST_CHANNEL_ID_PARAM`）から読む。public リポジトリにチャンネル ID を置かないための措置
 
-Cost Explorer の API は 1 リクエスト $0.01 課金される。日次実行で 2 リクエスト = 月 $0.6 程度。
-
-`SETTLING_MARGIN` を 12 時間にしたのは、実測の確定所要（約 8 時間）に余裕を持たせつつ、レポートをもう 1 日分古くしないため。この値を変えると対象日の新しさと確度のバランスが動く。
-
-レポートは常に速報値であり、`PRELIMINARY_NOTE` を必ず末尾に付ける。当月累計は対象日より後の未確定な日も含み、AWS 自身も請求確定まで金額を `Estimated` として返し続けるため。
-
-cron の JST 23:00 は運用上の設定であって設計の前提ではない。変更しても対象日の正しさは `SETTLING_MARGIN` が担保する。
+**cost の設計で動かしてはいけない前提**: 対象日の正しさは `SETTLING_MARGIN` が担保しており、cron の JST 23:00 は運用上の設定にすぎない。時刻を変えても壊れない。12 時間という値は実測の確定所要（約 8 時間）に余裕を持たせつつレポートをもう 1 日古くしない妥協点で、変えると対象日の新しさと確度のバランスが動く。レポートは常に速報値であり `PRELIMINARY_NOTE` を必ず末尾に付ける（当月累計は未確定な日を含み、AWS 自身も請求確定まで `Estimated` を返し続けるため）。API 課金は 1 リクエスト USD 0.01 で、日次 2 リクエスト = 月 USD 0.6 程度。
 
 ## ログ
 
