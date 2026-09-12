@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from src.advisor import run_advisor_job
+from src.cost import run_cost_job
 from src.digest import run_digest_job
 from src.logging_config import configure_logging
 
@@ -28,4 +29,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     logger.info("Dispatching job=%s at %s", job, now.isoformat())
     if job == "advisor":
         return run_advisor_job(now)
+    if job == "cost":
+        return run_cost_job(now)
     return run_digest_job(now)

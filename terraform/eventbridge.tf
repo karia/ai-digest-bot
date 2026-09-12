@@ -47,6 +47,26 @@ resource "aws_scheduler_schedule" "daily_digest" {
   }
 }
 
+resource "aws_scheduler_schedule" "cost" {
+  name       = "${var.project_name}-cost"
+  group_name = "default"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  # JST 08:00: stagger from the 09:00 digest and leave overnight time for the previous day's CE data to arrive.
+  schedule_expression          = "cron(0 8 * * ? *)"
+  schedule_expression_timezone = "Asia/Tokyo"
+
+  target {
+    arn      = aws_lambda_function.main.arn
+    role_arn = aws_iam_role.scheduler.arn
+    # NOTE: do not use jsonencode() here; it breaks context attribute substitution.
+    input = "{\"job\": \"cost\", \"scheduled_time\": \"<aws.scheduler.scheduled-time>\"}"
+  }
+}
+
 resource "aws_scheduler_schedule" "advisor" {
   name       = "${var.project_name}-advisor"
   group_name = "default"

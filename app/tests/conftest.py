@@ -24,6 +24,8 @@ SAMPLE_RSS = """<?xml version="1.0"?>
 TABLE_NAME = "test-sources"
 SSM_PARAM = "/test/slack-bot-token"
 SLACK_TOKEN = "xoxb-test-token"
+COST_SSM_PARAM = "/test/cost-channel-id"
+COST_CHANNEL = "CCOST00001"
 
 ADVISORS_TABLE = "test-advisors"
 JUDGMENTS_TABLE = "test-advisor-judgments"
@@ -102,6 +104,7 @@ def env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AWS_REGION", "ap-northeast-1")
     monkeypatch.setenv("SOURCES_TABLE_NAME", TABLE_NAME)
     monkeypatch.setenv("SLACK_BOT_TOKEN_PARAM", SSM_PARAM)
+    monkeypatch.setenv("COST_CHANNEL_ID_PARAM", COST_SSM_PARAM)
     monkeypatch.setenv("BEDROCK_MODEL_ID", "global.anthropic.claude-sonnet-5")
     monkeypatch.setenv("BEDROCK_ADVICE_MODEL_ID", "global.anthropic.claude-opus-5")
     monkeypatch.setenv("ADVISORS_TABLE_NAME", ADVISORS_TABLE)
@@ -126,6 +129,7 @@ def ssm_parameter():
             Value=SLACK_TOKEN,
             Type="SecureString",
         )
+        ssm.put_parameter(Name=COST_SSM_PARAM, Value=COST_CHANNEL, Type="String")
         yield ssm
 
 
@@ -142,6 +146,7 @@ def integrated_aws_mock():
             Value=SLACK_TOKEN,
             Type="SecureString",
         )
+        ssm.put_parameter(Name=COST_SSM_PARAM, Value=COST_CHANNEL, Type="String")
         yield
 
 

@@ -1,4 +1,4 @@
-.PHONY: setup config test lint lint-app lint-tf build clean deploy-infra deploy-app deploy deploy-infra-dry deploy-app-dry deploy-dry sources-list sources-add sources-delete migrate update-actions invoke advisors-list advisors-add advisors-delete invoke-advisor
+.PHONY: setup config test lint lint-app lint-tf build clean deploy-infra deploy-app deploy deploy-infra-dry deploy-app-dry deploy-dry sources-list sources-add sources-delete migrate update-actions invoke advisors-list advisors-add advisors-delete invoke-advisor invoke-cost
 
 export PATH := $(HOME)/.local/share/mise/shims:$(PATH)
 
@@ -9,7 +9,8 @@ APP_TABLE_ENV = SOURCES_TABLE_NAME="$(call tf_output,sources_table_name)" \
 LAMBDA_ENV = LAMBDA_FUNCTION_NAME="$(call tf_output,lambda_function_name)" \
 	LAMBDA_ROLE_ARN="$(call tf_output,lambda_role_arn)" \
 	$(APP_TABLE_ENV) \
-	SLACK_BOT_TOKEN_PARAM="$(call tf_output,slack_token_param_name)"
+	SLACK_BOT_TOKEN_PARAM="$(call tf_output,slack_token_param_name)" \
+	COST_CHANNEL_ID_PARAM="$(call tf_output,cost_channel_id_param_name)"
 
 setup:
 	mise install
@@ -129,3 +130,11 @@ invoke-advisor:
 	  /dev/stdout
 	@echo "Invoked asynchronously (StatusCode 202 = accepted). Check results in CloudWatch Logs / Slack."
 
+invoke-cost:
+	aws lambda invoke \
+	  --function-name "$$(terraform -chdir=terraform output -raw lambda_function_name)" \
+	  --invocation-type Event \
+	  --cli-binary-format raw-in-base64-out \
+	  --payload "$$(python3 -c "from datetime import UTC,datetime; print('{\"job\":\"cost\",\"scheduled_time\":\"' + datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ') + '\"}')")" \
+	  /dev/stdout
+	@echo "Invoked asynchronously (StatusCode 202 = accepted). Check results in CloudWatch Logs / Slack."

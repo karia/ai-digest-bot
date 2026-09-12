@@ -2,7 +2,7 @@
 
 AWS Blog などの技術ブログフィードを日次で取得し、Bedrock 上の LLM エージェントが自律的に取得・要約を行い、Slack チャンネルへ日本語ダイジェストを投稿する Lambda Bot です。投稿は **ソース単位で 1 スレッド**にまとまり、ヘッドラインを親メッセージ、URL ごとの要約をスレッド返信として届けます。
 
-同じ Lambda には、iDeCo 等の保有商品について投資判断情報（BUY/SELL/HOLD）を配信する **advisor** ジョブも同居しています（詳細は後述の[投資判断アドバイザー（advisor）](#投資判断アドバイザーadvisor)を参照）。
+同じ Lambda には、iDeCo 等の保有商品について投資判断情報（BUY/SELL/HOLD）を配信する **advisor** ジョブと、AWS アカウントの利用料金を配信する **cost** ジョブも同居しています（詳細は後述の[投資判断アドバイザー（advisor）](#投資判断アドバイザーadvisor)と[コストレポート（cost）](#コストレポートcost)を参照）。
 
 ## アーキテクチャ
 
@@ -197,6 +197,49 @@ aws dynamodb delete-table --table-name karia-ai-digest-bot-feeds
 
 移行ルール: 旧 feeds を `channel_id` ごとに 1 ソースへ集約します（items は登録順）。チャンネルが複数ある場合、タイトルは `<TITLE> (<channel_id>)` になります。
 
+## コストレポート（cost）
+
+AWS アカウントの利用料金を Cost Explorer から取得し、当月累計・当月の着地見込み・前日のサービス別内訳を Slack へ投稿するジョブです。EventBridge（毎日 JST 8:00、`job: "cost"`）→ Lambda が起点。digest（9:00）より前に動かすのは、前日分のコストが Cost Explorer へ反映される時間を夜間に確保するためです。投稿は 1 メッセージで、スレッドは作りません。
+
+サービス別の行には、前日比と前月同日比の増減を並べます。日額が $0.01 未満のサービスは末尾の 1 行にまとめますが、判定は絶対値で行うため、返金やクレジットのようなマイナス計上は畳まれずに単独行として残ります。
+
+```
+AWS コスト 2026-09-12
+
+当月累計 $21.47  →  着地見込み $47.07
+前日 09/11 $1.71 (前々日比 -$0.49 / 前月同日比 +$0.26)
+
+Amazon Simple Storage Service     $1.04  前日      ±0  前月同日  +$0.01
+Claude Opus 5 (Amazon Bedrock…    $0.41  前日  +$0.41  前月同日  +$0.41
+Claude Sonnet 5 (Amazon Bedro…    $0.24  前日  -$0.79  前月同日  +$0.24
+AWS Secrets Manager               $0.02  前日      ±0  前月同日  +$0.02
+他 8 サービス $0.00
+```
+
+### 投稿先チャンネル
+
+チャンネル ID は SSM Parameter Store（`/<project_name>/cost-channel-id`）から読みます。terraform が作るのはプレースホルダだけなので、値は手動で入れてください。public リポジトリにチャンネル ID を残さないため、コードや terraform の変数には書きません。
+
+```bash
+aws ssm put-parameter --name /karia-ai-digest-bot/cost-channel-id \
+  --value CXXXXXXXXXX --type String --overwrite
+```
+
+### Cost Explorer の課金と精度
+
+Cost Explorer の API は 1 リクエスト $0.01 課金されます。1 回の実行で `GetCostAndUsage` と `GetCostForecast` を 1 回ずつ呼ぶため、日次実行で月 $0.6 程度です。サービス数が増えてレスポンスがページングされる日は、全ページを読むぶんだけ加算されます。
+
+着地見込みは `GetCostForecast` を `MONTHLY` で呼んだ結果です。月の途中を起点に指定しても API 側が期間を月全体へ正規化するため、返る値は**その月の着地額**であり、当月累計へ加算するものではありません。
+
+Cost Explorer は未反映の日を「グループ 0 件」で返し、これは利用が実際にゼロだった日と区別できません。そのため前日分が未反映のときは、当月累計だけを投稿し、前日のサービス別内訳は省いて未反映である旨を添えます。
+
+### 手動実行
+
+```bash
+make invoke-cost
+```
+
+
 ## 投資判断アドバイザー（advisor）
 
 保有商品・乗り換え候補（iDeCo 想定）について、基準価額の推移（定量）と市況ニュース・USD/JPY 為替（定性）を Bedrock 上の Agent が調査し、商品ごとに BUY/SELL/HOLD の投資判断情報を Slack へ投稿する、digest とは独立したジョブ系統です。EventBridge（毎日 JST 17:00、`job: "advisor"`）→ Lambda が起点。投稿は **アドバイザー単位で 1 スレッド**にまとまり、市況サマリ・判断変更点・過去推奨の成績サマリ・免責を親メッセージ、商品ごとの判断（前回 → 今回の変化を含む）をスレッド返信として届けます。判断履歴は DynamoDB `advisor-judgments` テーブルに保存され、次回実行時の成績検証（騰落率）に使われます。投稿日は `POST_WEEKDAY`（`FRI` など JST の曜日）で指定します。起動自体は毎日なので、目標曜日の実行が失敗しても翌日以降の実行が取りこぼしを拾います。`POST_WEEKDAY` を指定しない場合は `interval_days`（既定7日）による間隔判定になり、投稿日は最初の投稿日に引きずられます。いずれも同一日の再実行では重複投稿しません。
@@ -232,7 +275,7 @@ make invoke-advisor
 
 advisor は `channels:history`（または `groups:history`）で bot 自身の前回投稿を検索して冪等性を判定します。digest と同じく、bot がこのスコープを持ち、投稿先チャンネルに**参加している**必要があります（未参加の場合は誤って重複投稿するより安全側に倒し、投稿せずエラー終了します）。
 
-**digest と advisor は必ず別チャンネルに投稿してください。** digest の `slack_last_bot_post` はヘッダーを見ずに bot の直前の投稿を探すため、advisor と同一チャンネルに同居させると advisor のスレッドを拾ってしまい、digest の対象期間計算が狂います（advisor 側は `title` でヘッダーフィルタしているため、この問題の影響は受けません）。詳細は [ADR 0001 の Consequences](docs/adr/0001-ideco-investment-advisor.md) を参照してください。
+**3 ジョブは同一チャンネルに同居できます。** 前回投稿を読むのは digest と advisor の 2 つで、どちらも `slack_reader.find_last_post_time` でヘッダーが一致する投稿だけを対象にするため、他ジョブのスレッドを自分のものと取り違えません（cost は履歴を読みません）。同居の条件は、同一チャンネル内でヘッダーが重複しないことです。なお [ADR 0001 の Consequences](docs/adr/0001-ideco-investment-advisor.md) には digest と advisor を別チャンネルに分ける旨の記述がありますが、これは digest がヘッダーで絞り込む前の制約です。
 
 **`TITLE` は表示用ヘッダーであると同時に冪等性の目印です。** advisor は「自分の `title` をヘッダーに持つ過去の投稿」を探して投稿済みかを判定するため、`TITLE` を変更すると過去の投稿が見つからなくなり、`interval_days` を待たずにその場で投稿します。誤字修正などで変更するときは、次回投稿が前倒しで発火することを織り込んでください。
 

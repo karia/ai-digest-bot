@@ -18,6 +18,11 @@ output "slack_token_param_name" {
   value       = aws_ssm_parameter.slack_token.name
 }
 
+output "cost_channel_id_param_name" {
+  description = "SSM parameter name for cost report Slack channel ID"
+  value       = aws_ssm_parameter.cost_channel_id.name
+}
+
 output "advisors_table_name" {
   description = "DynamoDB advisors table name"
   value       = aws_dynamodb_table.advisors.name

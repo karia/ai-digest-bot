@@ -510,3 +510,24 @@ def test_handler_treats_an_unknown_job_as_digest(integrated_aws_mock):
 
     mock_advisor.assert_not_called()
     mock_digest.assert_called_once()
+
+
+def test_handler_dispatches_to_the_cost_job(integrated_aws_mock):
+    from src.handler import lambda_handler
+
+    with (
+        patch(
+            "src.handler.run_cost_job",
+            return_value={"status": "ok", "date": "2026-09-11"},
+        ) as mock_cost,
+        patch("src.handler.run_digest_job") as mock_digest,
+        patch("src.handler.run_advisor_job") as mock_advisor,
+    ):
+        result = lambda_handler(
+            {"job": "cost", "scheduled_time": "2026-09-11T23:00:00Z"}, None
+        )
+
+    assert result == {"status": "ok", "date": "2026-09-11"}
+    mock_digest.assert_not_called()
+    mock_advisor.assert_not_called()
+    mock_cost.assert_called_once_with(datetime.fromisoformat("2026-09-11T23:00:00Z"))
