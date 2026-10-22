@@ -1,11 +1,11 @@
 [tools]
-python = "3.14"
-terraform = "latest"
-tflint = "latest"
-"aqua:fujiwara/lambroll" = "latest"
-"aqua:aws/aws-cli" = "2"
-"aqua:suzuki-shunsuke/pinact" = "latest"
-prek = "latest"
+python = "3.14.6"
+terraform = "1.15.6"
+tflint = "0.63.1"
+"aqua:fujiwara/lambroll" = "1.4.4"
+aws-cli = "2.38.4"
+"aqua:suzuki-shunsuke/pinact" = "5.0.0"
+prek = "0.5.7"
 
 [env]
 AWS_REGION = "ap-northeast-1"
