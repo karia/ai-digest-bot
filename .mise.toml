@@ -4,7 +4,7 @@ terraform = "1.15.6"
 tflint = "0.63.1"
 "aqua:fujiwara/lambroll" = "1.4.4"
 aws-cli = "2.38.4"
-"aqua:suzuki-shunsuke/pinact" = "5.0.0"
+"aqua:suzuki-shunsuke/pinact" = "5.0.1"
 prek = "0.5.7"
 
 [env]
