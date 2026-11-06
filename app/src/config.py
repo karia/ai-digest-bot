@@ -48,7 +48,7 @@ BEDROCK_MODEL_ID: str = os.environ.get(
     "BEDROCK_MODEL_ID", "global.anthropic.claude-sonnet-5"
 )
 BEDROCK_ADVICE_MODEL_ID: str = os.environ.get(
-    "BEDROCK_ADVICE_MODEL_ID", "global.anthropic.claude-opus-5"
+    "BEDROCK_ADVICE_MODEL_ID", "global.anthropic.claude-opus-5-5"
 )
 BEDROCK_ADVICE_MAX_TOKENS: int = 16000
 AWS_REGION: str = os.environ.get("AWS_REGION", "ap-northeast-1")
