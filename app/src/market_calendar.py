@@ -1,9 +1,11 @@
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import NamedTuple
 
 import requests
 from bs4 import BeautifulSoup
+
+from src import config
 
 CALENDAR_URL = "https://fx.minkabu.jp/indicators"
 PAGE_DAYS = 7
@@ -13,6 +15,7 @@ COUNTRIES = frozenset({"US", "JP", "EU", "CN"})
 
 _DATE_PATTERN = re.compile(r"(\d{4})年(\d{1,2})月(\d{1,2})日")
 _DETAIL_SUFFIX = re.compile(r"\s*\[[^\]]*\]$")
+_TIME_PATTERN = re.compile(r"(\d{1,2}):(\d{2})")
 
 
 class MarketEvent(NamedTuple):
@@ -64,18 +67,35 @@ def _is_major(event: MarketEvent) -> bool:
     return event.importance >= MIN_IMPORTANCE
 
 
-def select_major_events(
-    events: list[MarketEvent], start: date, days: int
-) -> list[MarketEvent]:
-    """Keep major releases in ``[start, start + days)``, one row per release.
+def _is_after(event: MarketEvent, now: datetime) -> bool:
+    matched = _TIME_PATTERN.fullmatch(event.time)
+    if not matched:
+        return event.date >= now.date()
+    released = datetime(
+        event.date.year,
+        event.date.month,
+        event.date.day,
+        int(matched.group(1)),
+        int(matched.group(2)),
+        tzinfo=config.JST,
+    )
+    return released > now
 
-    A release such as CPI is listed once per sub-figure; those collapse into
-    one row keeping the highest importance.
+
+def select_major_events(
+    events: list[MarketEvent], now: datetime, days: int
+) -> list[MarketEvent]:
+    """Keep major releases after ``now`` within ``days`` JST calendar days.
+
+    A release with no fixed time (未定) is kept for the whole of its day. A
+    release such as CPI is listed once per sub-figure; those collapse into one
+    row keeping the highest importance.
     """
-    end = start + timedelta(days=days)
+    now = now.astimezone(config.JST)
+    end = now.date() + timedelta(days=days)
     selected: dict[tuple[date, str, str], MarketEvent] = {}
     for event in events:
-        if not (start <= event.date < end) or not _is_major(event):
+        if event.date >= end or not _is_after(event, now) or not _is_major(event):
             continue
         key = (event.date, event.time, event.name)
         kept = selected.get(key)
@@ -84,12 +104,13 @@ def select_major_events(
     return sorted(selected.values(), key=lambda e: (e.date, e.time))
 
 
-def fetch_upcoming_events(start: date, days: int = 14) -> list[MarketEvent]:
-    """Download the calendar pages covering ``days`` from ``start``.
+def fetch_upcoming_events(now: datetime, days: int) -> list[MarketEvent]:
+    """Download the calendar pages covering ``days`` JST days from ``now``.
 
     Raises:
         requests.RequestException: if any page fails to download.
     """
+    start = now.astimezone(config.JST).date()
     events: list[MarketEvent] = []
     for offset in range(0, days, PAGE_DAYS):
         page_date = start + timedelta(days=offset)
@@ -101,7 +122,7 @@ def fetch_upcoming_events(start: date, days: int = 14) -> list[MarketEvent]:
         )
         response.raise_for_status()
         events.extend(parse_calendar_html(response.text))
-    return select_major_events(events, start, days)
+    return select_major_events(events, now, days)
 
 
 def format_events(events: list[MarketEvent]) -> str:

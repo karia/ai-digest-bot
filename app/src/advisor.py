@@ -32,7 +32,7 @@ DISCLAIMER = (
 
 # Keep the performance summary concise while retaining the full history in DynamoDB.
 HISTORY_LIMIT = 2
-UPCOMING_DAYS = 14
+UPCOMING_DAYS = 30
 
 
 def _product_line(product: Product, nav_summary: str, previous: str | None) -> str:
@@ -127,9 +127,7 @@ def _process_advisor(advisor: Advisor, now: datetime) -> str:
     }
 
     try:
-        events_text = format_events(
-            fetch_upcoming_events(now.astimezone(config.JST).date(), UPCOMING_DAYS)
-        )
+        events_text = format_events(fetch_upcoming_events(now, UPCOMING_DAYS))
     except Exception as e:
         logger.warning("Market calendar fetch failed for %s: %s", advisor_id, e)
         events_text = "（取得に失敗。ニュースと既知の日程から把握すること）"
