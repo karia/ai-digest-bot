@@ -193,9 +193,7 @@ def test_continues_when_one_products_nav_fetch_fails(integrated_aws_mock):
     assert result["results"]["ideco-sbi"] == "success"
 
 
-def test_context_lists_upcoming_events_from_the_jst_date(
-    integrated_aws_mock, no_market_calendar
-):
+def test_context_lists_upcoming_events(integrated_aws_mock, no_market_calendar):
     from src.advisor import UPCOMING_DAYS, run_advisor_job
     from src.market_calendar import MarketEvent
 
@@ -209,9 +207,9 @@ def test_context_lists_upcoming_events_from_the_jst_date(
         patch("src.advisor.run_advice", return_value=_advice()) as mock_advice,
         patch("src.advisor.slack_notifier.post_message", return_value="t"),
     ):
-        run_advisor_job(datetime(2026, 7, 24, 16, 0, tzinfo=UTC))
+        run_advisor_job(NOW)
 
-    no_market_calendar.assert_called_once_with(date(2026, 7, 25), UPCOMING_DAYS)
+    no_market_calendar.assert_called_once_with(NOW, UPCOMING_DAYS)
     context = mock_advice.call_args.kwargs["context"]
     assert "2026-08-07(金) 21:30 ★5 アメリカ・雇用統計 07月" in context
 
