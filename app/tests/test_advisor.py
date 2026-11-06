@@ -26,6 +26,12 @@ def reload_modules():
     importlib.reload(advisor)
 
 
+@pytest.fixture(autouse=True)
+def no_market_calendar(reload_modules):
+    with patch("src.advisor.fetch_upcoming_events", return_value=[]) as mock:
+        yield mock
+
+
 def _advice(judgment: str = "HOLD", summary: str = "USD/JPY は 163 円台。"):
     from src.agent import AdviceResult, ProductAdvice
 
@@ -185,6 +191,48 @@ def test_continues_when_one_products_nav_fetch_fails(integrated_aws_mock):
     # The advice still runs; the agent can fall back to the nav_fetch tool.
     mock_advice.assert_called_once()
     assert result["results"]["ideco-sbi"] == "success"
+
+
+def test_context_lists_upcoming_events_from_the_jst_date(
+    integrated_aws_mock, no_market_calendar
+):
+    from src.advisor import UPCOMING_DAYS, run_advisor_job
+    from src.market_calendar import MarketEvent
+
+    no_market_calendar.return_value = [
+        MarketEvent(date(2026, 8, 7), "21:30", 5, "US", "アメリカ・雇用統計 07月")
+    ]
+
+    with (
+        patch("src.advisor.find_last_post_time", return_value=None),
+        patch("src.advisor.fetch_nav_series", return_value=SERIES),
+        patch("src.advisor.run_advice", return_value=_advice()) as mock_advice,
+        patch("src.advisor.slack_notifier.post_message", return_value="t"),
+    ):
+        run_advisor_job(datetime(2026, 7, 24, 16, 0, tzinfo=UTC))
+
+    no_market_calendar.assert_called_once_with(date(2026, 7, 25), UPCOMING_DAYS)
+    context = mock_advice.call_args.kwargs["context"]
+    assert "2026-08-07(金) 21:30 ★5 アメリカ・雇用統計 07月" in context
+
+
+def test_continues_when_the_market_calendar_fails(
+    integrated_aws_mock, no_market_calendar
+):
+    from src.advisor import run_advisor_job
+
+    no_market_calendar.side_effect = RuntimeError("calendar down")
+
+    with (
+        patch("src.advisor.find_last_post_time", return_value=None),
+        patch("src.advisor.fetch_nav_series", return_value=SERIES),
+        patch("src.advisor.run_advice", return_value=_advice()) as mock_advice,
+        patch("src.advisor.slack_notifier.post_message", return_value="t"),
+    ):
+        result = run_advisor_job(NOW)
+
+    assert result["results"]["ideco-sbi"] == "success"
+    assert "取得に失敗" in mock_advice.call_args.kwargs["context"]
 
 
 def test_records_an_error_when_advice_fails(integrated_aws_mock):

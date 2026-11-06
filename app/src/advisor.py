@@ -12,6 +12,7 @@ from src.advisor_store import (
     put_judgments,
 )
 from src.agent import run_advice
+from src.market_calendar import fetch_upcoming_events, format_events
 from src.nav import fetch_nav_series
 from src.performance import (
     JUDGMENT_LABELS,
@@ -31,6 +32,7 @@ DISCLAIMER = (
 
 # Keep the performance summary concise while retaining the full history in DynamoDB.
 HISTORY_LIMIT = 2
+UPCOMING_DAYS = 14
 
 
 def _product_line(product: Product, nav_summary: str, previous: str | None) -> str:
@@ -48,6 +50,7 @@ def _build_context(
     nav_summaries: dict[str, str],
     previous: dict[str, str],
     performance_text: str,
+    events_text: str,
 ) -> str:
     lines = [
         _product_line(
@@ -62,6 +65,8 @@ def _build_context(
         + "\n".join(lines)
         + "\n\n## 過去の判断とその後の騰落率\n"
         + performance_text
+        + f"\n\n## 今後{UPCOMING_DAYS}日間の主要な経済指標（時刻は JST）\n"
+        + events_text
     )
 
 
@@ -121,7 +126,17 @@ def _process_advisor(advisor: Advisor, now: datetime) -> str:
         isin: JUDGMENT_LABELS.get(code, code) for isin, code in previous_codes.items()
     }
 
-    context = _build_context(products, nav_summaries, previous_labels, performance_text)
+    try:
+        events_text = format_events(
+            fetch_upcoming_events(now.astimezone(config.JST).date(), UPCOMING_DAYS)
+        )
+    except Exception as e:
+        logger.warning("Market calendar fetch failed for %s: %s", advisor_id, e)
+        events_text = "（取得に失敗。ニュースと既知の日程から把握すること）"
+
+    context = _build_context(
+        products, nav_summaries, previous_labels, performance_text, events_text
+    )
     try:
         advice = run_advice(
             context=context,

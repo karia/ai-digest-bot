@@ -78,9 +78,10 @@ advisor の実行フロー（`app/src/advisor.py:run_advisor_job`）:
 3. `slack_reader.should_post(last_post, now, interval_days)` で投稿可否を判定: 前回投稿が同日（JST）、または前回投稿から `interval_days` 日未満なら skip。`post_weekday`（JST の曜日、月=0）が設定されていればそちらが周期を決め、`interval_days` は参照しない。起動は毎日なので、目標曜日の実行が失敗しても翌日以降の実行が拾う。いずれの場合も同日複数回実行では投稿しない
 4. 投稿対象なら `products` ごとに `nav.fetch_nav_series(isin, assoc_fund_cd)` で投信協会 CSV から基準価額の時系列を取得し（失敗した商品は summary なしで続行）、`performance.summarize_nav` で直近の推移テキストを作る
 5. `advisor_store.get_judgment_history(advisor_id)` で過去の判断履歴（最大8件）を取得し、`performance.build_performance` で前回判断時点の基準価額に対する現在の騰落率を計算、`format_performance_summary` で成績サマリ文にする。`latest_judgment_by_isin` で商品ごとの前回判断も取り出す
-6. 商品一覧・基準価額サマリ・前回判断・成績サマリをまとめたコンテキストを `agent.run_advice(context, trading_notes, news_feeds, now)` に渡す。Agent は `nav_fetch` / `rss_fetch` / `web_scrape` / `api_fetch` を自律選択して市況ニュースと USD/JPY 為替を調査し、商品ごとの `{isin, judgment(BUY/SELL/HOLD), reason}` と市況サマリを構造化出力で返す
-7. `slack_notifier.post_message(channel, text=市況サマリ+成績サマリ+免責, header=title)` で親メッセージを投稿して `thread_ts` を取得。商品ごとに `performance.JUDGMENT_LABELS` のラベルと「前回 → 今回」の変化を添えてスレッド返信（1 件失敗しても他の商品の返信は続行）
-8. 今回の判断を `advisor_store.put_judgments(advisor_id, run_date, judgments)` に保存する（`run_date` は JST 日付。同日に再実行すると上書き）
+6. `market_calendar.fetch_upcoming_events` で経済指標カレンダー（みんかぶ）から JST の今日以降 `UPCOMING_DAYS` 日間の主要指標を取得する。約定までの期間に控える予定を判断へ織り込むため。重要度と国で絞り、同じ指標の内訳行は 1 行にまとめる。取得に失敗しても続行し、コンテキストに取得失敗と書く（Agent がニュースから補う）
+7. 商品一覧・基準価額サマリ・前回判断・成績サマリ・主要指標の予定をまとめたコンテキストを `agent.run_advice(context, trading_notes, news_feeds, now)` に渡す。Agent は `nav_fetch` / `rss_fetch` / `web_scrape` / `api_fetch` を自律選択して市況ニュースと USD/JPY 為替を調査し、商品ごとの `{isin, judgment(BUY/SELL/HOLD), reason}` と市況サマリを構造化出力で返す
+8. `slack_notifier.post_message(channel, text=市況サマリ+成績サマリ+免責, header=title)` で親メッセージを投稿して `thread_ts` を取得。商品ごとに `performance.JUDGMENT_LABELS` のラベルと「前回 → 今回」の変化を添えてスレッド返信（1 件失敗しても他の商品の返信は続行）
+9. 今回の判断を `advisor_store.put_judgments(advisor_id, run_date, judgments)` に保存する（`run_date` は JST 日付。同日に再実行すると上書き）
 
 digest と同様、**投稿は Python（`advisor.py`）がオーケストレーションし、`agent.run_advice` は判断と市況サマリを返すだけ**で Slack へは投稿しない。
 
