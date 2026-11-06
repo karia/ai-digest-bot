@@ -413,6 +413,14 @@ def run_advice(
     )
     logger.info("Bedrock input: %s", prompt)
     result = agent(prompt, structured_output_model=AdviceResult)
+    invocation = result.metrics.latest_agent_invocation
+    cycles = invocation.cycles if invocation else []
+    logger.info(
+        "Advice output tokens: peak %d per call (limit %d) over %d call(s)",
+        max((c.usage["outputTokens"] for c in cycles), default=0),
+        config.BEDROCK_ADVICE_MAX_TOKENS,
+        len(cycles),
+    )
     advice = result.structured_output
     if not isinstance(advice, AdviceResult):
         raise ValueError(f"advice agent returned no structured output: {result}")

@@ -371,6 +371,42 @@ def test_run_advice_uses_the_heavier_advice_model():
     assert config.BEDROCK_ADVICE_MODEL_ID != config.BEDROCK_MODEL_ID
 
 
+def test_run_advice_logs_the_peak_output_tokens_per_call(
+    caplog: pytest.LogCaptureFixture,
+):
+    from unittest.mock import MagicMock, patch
+
+    from src import config
+    from src.agent import AdviceResult, run_advice
+    from strands.telemetry.metrics import AgentInvocation, EventLoopCycleMetric
+
+    def cycle(output_tokens: int) -> EventLoopCycleMetric:
+        return EventLoopCycleMetric(
+            event_loop_cycle_id=str(output_tokens),
+            usage={"inputTokens": 0, "outputTokens": output_tokens, "totalTokens": 0},
+        )
+
+    result = MagicMock()
+    result.structured_output = AdviceResult(summary="s", advices=[])
+    result.metrics.latest_agent_invocation = AgentInvocation(
+        cycles=[cycle(300), cycle(9000), cycle(1200)]
+    )
+
+    with (
+        patch("src.agent.BedrockModel"),
+        patch("src.agent.Agent") as mock_agent,
+        caplog.at_level(logging.INFO, logger="src.agent"),
+    ):
+        mock_agent.return_value.return_value = result
+        run_advice("ctx", "", [], datetime(2026, 7, 24, 8, 0, tzinfo=UTC))
+
+    messages = "\n".join(r.getMessage() for r in caplog.records)
+    assert (
+        f"peak 9000 per call (limit {config.BEDROCK_ADVICE_MAX_TOKENS}) over 3 call(s)"
+        in messages
+    )
+
+
 def test_run_digest_uses_the_lighter_digest_model():
     from unittest.mock import MagicMock, patch
 
