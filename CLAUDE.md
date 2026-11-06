@@ -12,9 +12,9 @@ Bedrock 上の Strands Agent を使って Slack に日本語で情報配信す�
 
 ## モデルの使い分け
 
-Bedrock のモデルは用途で 2 つに分かれる。どちらも `global.` 推論プロファイルで、推論は日本国内に限定されない。Sonnet 5 には `jp.` プロファイルが無く、Opus 5.5 には `jp.` もあるが `global.` を選んでいる。この所在地の変更を許容したうえでの選択である。
+Bedrock のモデルは用途で 2 つに分かれる。どちらも `global.` 推論プロファイルで、推論は日本国内に限定されない。Sonnet 5.5 には `jp.` プロファイルが無く、Opus 5.5 には `jp.` もあるが `global.` を選んでいる。この所在地の変更を許容したうえでの選択である。
 
-- `BEDROCK_MODEL_ID`（既定 `global.anthropic.claude-sonnet-5`）— digest 系 4 関数（`run_plan` / `run_digest` / `run_daily_digests` / `run_headline`）。取得済みテキストの要約が主で、軽量モデルで足りる
+- `BEDROCK_MODEL_ID`（既定 `global.anthropic.claude-sonnet-5-5`）— digest 系 4 関数（`run_plan` / `run_digest` / `run_daily_digests` / `run_headline`）。取得済みテキストの要約が主で、軽量モデルで足りる
 - `BEDROCK_ADVICE_MODEL_ID`（既定 `global.anthropic.claude-opus-5-5`）— `run_advice` のみ。BUY/SELL/HOLD の投資判断は推論の重さが利くため上位モデルを使う
 
 `claude-fable-5` は使えない。アカウントのデータ保持モード（`aws bedrock get-account-data-retention`）が `default` だと `data retention mode 'default' is not available for this model` で弾かれ、回避にはアカウント全体の設定変更が要る。同居する他のワークロードにも及ぶため採らない。

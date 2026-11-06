@@ -105,7 +105,7 @@ def env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SOURCES_TABLE_NAME", TABLE_NAME)
     monkeypatch.setenv("SLACK_BOT_TOKEN_PARAM", SSM_PARAM)
     monkeypatch.setenv("COST_CHANNEL_ID_PARAM", COST_SSM_PARAM)
-    monkeypatch.setenv("BEDROCK_MODEL_ID", "global.anthropic.claude-sonnet-5")
+    monkeypatch.setenv("BEDROCK_MODEL_ID", "global.anthropic.claude-sonnet-5-5")
     monkeypatch.setenv("BEDROCK_ADVICE_MODEL_ID", "global.anthropic.claude-opus-5-5")
     monkeypatch.setenv("ADVISORS_TABLE_NAME", ADVISORS_TABLE)
     monkeypatch.setenv("JUDGMENTS_TABLE_NAME", JUDGMENTS_TABLE)

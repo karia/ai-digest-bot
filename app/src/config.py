@@ -45,7 +45,7 @@ JUDGMENTS_TABLE_NAME: str = os.environ["JUDGMENTS_TABLE_NAME"]
 # model. The advisor's BUY/SELL/HOLD call is the one judgment worth the heavier
 # one, so it has its own setting.
 BEDROCK_MODEL_ID: str = os.environ.get(
-    "BEDROCK_MODEL_ID", "global.anthropic.claude-sonnet-5"
+    "BEDROCK_MODEL_ID", "global.anthropic.claude-sonnet-5-5"
 )
 BEDROCK_ADVICE_MODEL_ID: str = os.environ.get(
     "BEDROCK_ADVICE_MODEL_ID", "global.anthropic.claude-opus-5-5"
