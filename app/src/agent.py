@@ -392,6 +392,7 @@ def run_advice(
     model = BedrockModel(
         model_id=config.BEDROCK_ADVICE_MODEL_ID,
         region_name=config.AWS_REGION,
+        max_tokens=config.BEDROCK_ADVICE_MAX_TOKENS,
     )
     agent = Agent(
         model=model,

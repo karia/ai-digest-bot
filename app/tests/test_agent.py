@@ -367,6 +367,7 @@ def test_run_advice_uses_the_heavier_advice_model():
         run_advice("ctx", "", [], datetime(2026, 7, 24, 8, 0, tzinfo=UTC))
 
     assert mock_model.call_args.kwargs["model_id"] == config.BEDROCK_ADVICE_MODEL_ID
+    assert mock_model.call_args.kwargs["max_tokens"] == config.BEDROCK_ADVICE_MAX_TOKENS
     assert config.BEDROCK_ADVICE_MODEL_ID != config.BEDROCK_MODEL_ID
 
 
