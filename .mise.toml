@@ -1,5 +1,5 @@
 [tools]
-python = "3.14.6"
+python = "3.14.10"
 terraform = "1.17.1"
 tflint = "0.65.0"
 "aqua:fujiwara/lambroll" = "1.6.1"
