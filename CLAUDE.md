@@ -106,7 +106,7 @@ cost の実行フロー（`app/src/cost.py:run_cost_job`）:
 
 **`make deploy-infra` を単体で実行しないこと。** apply はスケジュールを即座に有効化するが、Lambda のコードはまだ古い。新しい `job` 値や新しい環境変数を伴う変更では、その隙間に発火したスケジュールが旧ハンドラに届き、意図しない挙動（`job` を解釈できず digest として実行される等）になる。infra とコードは `make deploy` で続けて反映する。
 
-Lambda zip は `make build` が生成（`uv pip install -r requirements.txt --target .build/` + `app/src` をコピー）。Lambda は arm64 のため `--python-platform aarch64-manylinux2014 --only-binary :all:` でクロスインストールする（ローカルの OS/arch の wheel が混入すると `Runtime.ImportModuleError` になる。sdist のみの pure Python パッケージ `sgmllib3k` だけ `--no-binary` で例外）。zip に含めない/含めるファイルは `app/.lambdaignore` で制御する（フラットなワイルドカードのみ、`!` や `**` は不可）。`*.dist-info` は opentelemetry の entry_points が実行時に必要なため除外不可。boto3/botocore は Lambda ランタイム同梱なので除外可。
+Lambda zip は `make build` が生成（`uv pip install -r requirements.txt --target .build/` + `app/src` をコピー）。Lambda は arm64 のため `--python-platform aarch64-manylinux_2_28 --only-binary :all:` でクロスインストールする（タグは Lambda ランタイム（Amazon Linux 2023、glibc 2.34）が満たす範囲で選ぶ。古いタグに留めると、新しい glibc 向けの wheel しか出さないパッケージを解決できなくなる。ローカルの OS/arch の wheel が混入すると `Runtime.ImportModuleError` になる。sdist のみの pure Python パッケージ `sgmllib3k` だけ `--no-binary` で例外）。zip に含めない/含めるファイルは `app/.lambdaignore` で制御する（フラットなワイルドカードのみ、`!` や `**` は不可）。`*.dist-info` は opentelemetry の entry_points が実行時に必要なため除外不可。boto3/botocore は Lambda ランタイム同梱なので除外可。
 
 ## Tests
 
